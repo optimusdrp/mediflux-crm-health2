@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "Clinic": {
+      "title": "Clinic",
+      "description": "Clínica médica multi-tenant cadastrada no MediFlux",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID da clínica" },
+        "name": { "type": "string", "description": "Nome da clínica" },
+        "unit": { "type": "string", "description": "Unidade" },
+        "cnpj": { "type": "string", "description": "CNPJ da clínica" },
+        "phone": { "type": "string", "description": "Telefone de contato" },
+        "address": { "type": "string", "description": "Endereço físico" },
+        "createdAt": { "type": "string", "description": "Data ISO de criação" },
+        "isTrial": { "type": "boolean", "description": "Status de período trial" },
+        "trialEndsAt": { "type": "string", "description": "Data de expiração do trial" }
+      },
+      "required": ["id", "name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Usuário autenticado do sistema com controle RBAC e isolamento por clinicId",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID único do usuário" },
+        "clinicId": { "type": "string", "description": "ID da clínica vinculada para isolamento multi-tenant" },
+        "name": { "type": "string", "description": "Nome completo do usuário" },
+        "email": { "type": "string", "description": "E-mail de acesso" },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "medico", "recepcao", "financeiro", "terceirizado"],
+          "description": "Papel RBAC do usuário"
+        },
+        "crm": { "type": "string", "description": "Registro profissional CRM" },
+        "specialty": { "type": "string", "description": "Especialidade médica ou setor" },
+        "active": { "type": "boolean", "description": "Status ativo da conta" },
+        "passwordHash": { "type": "string", "description": "Hash PBKDF2 da senha" },
+        "passwordSalt": { "type": "string", "description": "Salt criptográfico" },
+        "registeredAt": { "type": "string", "description": "Data ISO de registro" },
+        "lastLoginAt": { "type": "string", "description": "Último login registrado" },
+        "authSource": { "type": "string", "description": "Origem da autenticação (firestore)" }
+      },
+      "required": ["id", "clinicId", "name", "email", "role", "active"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Paciente cadastrado sob custódia de uma clínica específica (Tenant)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID único do paciente" },
+        "clinicId": { "type": "string", "description": "ID da clínica vinculada" },
+        "name": { "type": "string", "description": "Nome completo do paciente" },
+        "cpf": { "type": "string", "description": "CPF do paciente" },
+        "phone": { "type": "string", "description": "Telefone / WhatsApp" },
+        "email": { "type": "string", "description": "E-mail de contato" },
+        "stage": { "type": "string", "description": "Etapa do funil de atendimento" },
+        "urgency": { "type": "string", "description": "Nível de urgência" },
+        "specialty": { "type": "string", "description": "Especialidade médica" },
+        "consentLGPD": { "type": "boolean", "description": "Consentimento LGPD ativo" },
+        "createdAt": { "type": "string", "description": "Data ISO de criação" }
+      },
+      "required": ["id", "clinicId", "name"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Registro imutável de auditoria e conformidade LGPD por clínica",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID do log" },
+        "clinicId": { "type": "string", "description": "ID da clínica" },
+        "action": { "type": "string", "description": "Ação executada" },
+        "target": { "type": "string", "description": "Alvo ou detalhe da ação" },
+        "authorEmail": { "type": "string", "description": "E-mail do autor" },
+        "authorRole": { "type": "string", "description": "Papel do autor" },
+        "timestamp": { "type": "string", "description": "Carimbo de data/hora ISO" },
+        "lgpdCategory": { "type": "string", "description": "Categoria LGPD" }
+      },
+      "required": ["id", "clinicId", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/clinics/{clinicId}": {
+      "schema": "Clinic",
+      "description": "Documentos das clínicas médicas cadastradas (Tenants)"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Usuários do sistema vinculados às clínicas para autenticação e RBAC multi-tenant"
+    },
+    "/clinics/{clinicId}/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Subcoleção de pacientes isolada por tenant (clinicId)"
+    },
+    "/clinics/{clinicId}/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Subcoleção de auditoria e conformidade LGPD isolada por tenant (clinicId)"
+    }
+  }
+}

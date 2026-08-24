@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+   Sistema de design da landing page e do modal de autenticação —
+   construído em torno da própria escala de prioridade do Protocolo de
+   Manchester (o padrão de triagem hospitalar que o produto automatiza),
+   em vez de uma paleta decorativa genérica. As 5 cores abaixo (vermelho,
+   laranja, amarelo, verde, azul) são as cores clínicas reais da escala,
+   usadas como estrutura da página — cada seção principal do hero e do
+   storytelling do protocolo assume uma dessas cores com intenção, não
+   como enfeite.
+   --------------------------------------------------------------------- */
+@theme {
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-display), ui-serif, Georgia, serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --color-triage-red: #dc2626;
+  --color-triage-red-soft: #fef2f2;
+  --color-triage-orange: #ea580c;
+  --color-triage-orange-soft: #fff7ed;
+  --color-triage-yellow: #ca8a04;
+  --color-triage-yellow-soft: #fefce8;
+  --color-triage-green: #16a34a;
+  --color-triage-green-soft: #f0fdf4;
+  --color-triage-blue: #2563eb;
+  --color-triage-blue-soft: #eff6ff;
+
+  --color-clinical-ink: #0f172a;
+  --color-clinical-paper: #f7fafc;
+  --color-clinical-line: #e2e8f0;
+
+  --animate-pulse-slow: pulse-slow 2.4s ease-in-out infinite;
+  --animate-scan: scan-line 3s linear infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(2000%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

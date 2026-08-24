@@ -1,0 +1,6 @@
+{
+  "name": "MediFlux CRM Health",
+  "description": "Sistema completo de CRM em saúde com triagem clínica dual AI, conformidade LGPD, isolamento multi-tenant, gestão de jornadas e integrações PEP/TISS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

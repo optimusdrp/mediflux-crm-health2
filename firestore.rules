@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------
+    // Correção de auditoria (prioridade alta #4): as regras anteriores
+    // eram, na prática, quase abertas — "allow read: if true" em
+    // /clinics e /users (qualquer pessoa na internet, sem estar
+    // autenticada no Firebase, lia esses documentos por completo), e as
+    // demais coleções só exigiam que os IDs tivessem um formato válido,
+    // não que o requisitante tivesse qualquer permissão real.
+    //
+    // ATUALIZAÇÃO: a limitação de arquitetura original (o projeto
+    // autenticava só com um JWT próprio, nunca com o Firebase
+    // Authentication, então request.auth nunca era preenchido) foi
+    // resolvida — ver lib/security/firebaseAdmin.ts e
+    // lib/security/firebaseClient.ts. Depois que verifyPassword() aprova
+    // o login (lib/db/firestore.ts), o backend gera um Firebase Custom
+    // Token com clinicId como claim, e o front-end troca esse token por
+    // uma sessão real do Firebase (signInWithCustomToken) — a partir daí
+    // request.auth.uid e request.auth.token.clinicId existem de fato, e
+    // as regras abaixo passam a valer como pretendido desde o início.
+    //
+    // Esta proteção depende de FIREBASE_SERVICE_ACCOUNT_KEY estar
+    // configurada no ambiente (ver .env.example) — sem ela,
+    // createFirebaseCustomToken() devolve null (fail-safe: o login pelo
+    // JWT próprio continua funcionando normalmente), e sem um custom
+    // token, request.auth continua null, então estas regras seguem
+    // negando por padrão (fail closed) até a Service Account ser
+    // configurada — nunca abrindo mão da proteção por causa disso.
+    //
+    // O seed inicial de clínicas/usuários de demonstração
+    // (seedFirestoreDatabase()) passou a escrever via Admin SDK
+    // (adminGetDocument/adminSetDocument), que ignora estas regras por
+    // design — por isso "create" pôde ser fechado por completo abaixo,
+    // sem depender de nenhuma abertura por formato de ID.
+    //
+    // As subcoleções patients/audit_logs/appointments/journeys nunca são
+    // de fato lidas ou escritas pelo código atual (todo esse dado vive
+    // no store em memória, não no Firestore) — fechadas por completo
+    // abaixo em vez de mantidas com uma validação que nunca chegaria a
+    // ser exercitada e passaria a falsa sensação de estarem protegidas
+    // por regra de negócio.
+    // -------------------------------------------------------------------
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Verdadeiro quando o usuário está autenticado no Firebase (via o
+    // custom token trocado no login — ver cabeçalho acima) E o clinicId
+    // reivindicado no token bate com o documento sendo acessado. Sem
+    // FIREBASE_SERVICE_ACCOUNT_KEY configurada, ou antes do primeiro
+    // login pós-integração, request.auth continua null e isto permanece
+    // falso — fail closed, nunca fail open.
+    function belongsToClinic(clinicId) {
+      return isSignedIn() && request.auth.token.clinicId == clinicId;
+    }
+
+    // 1. Clínicas (Tenants)
+    match /clinics/{clinicId} {
+      // Leitura e atualização exigem pertencer à própria clínica — nunca
+      // mais "if true". Só usuários autenticados via Firebase (custom
+      // token gerado no login, com clinicId como claim) conseguem ler
+      // ou atualizar o documento da própria clínica.
+      allow read: if belongsToClinic(clinicId);
+      allow update: if belongsToClinic(clinicId);
+      allow delete: if false;
+
+      // Criação fechada por completo (correção de auditoria #4,
+      // concluída) — antes ficava aberta por ID válido porque o seed
+      // inicial (seedFirestoreDatabase() em lib/db/firestore.ts) usava
+      // o SDK client (setDoc), sujeito a estas mesmas regras. O seed
+      // agora escreve via Firebase Admin SDK (adminSetDocument() em
+      // lib/security/firebaseAdmin.ts), que ignora estas regras por
+      // design — logo, nenhuma escrita legítima do backend depende mais
+      // de "create" estar aberto aqui, e a única forma de criar uma
+      // clínica passa a ser a rota administrativa autorizada.
+      allow create: if false;
+
+      // 1.1 a 1.4: subcoleções não utilizadas pelo código atual (todo o
+      // dado de operação vive em lib/db/store.ts, não no Firestore) —
+      // fechadas por completo em vez de expostas com uma regra que
+      // nunca seria exercitada de propósito pelo app.
+      match /patients/{patientId} {
+        allow read, write: if false;
+      }
+      match /audit_logs/{logId} {
+        allow read, write: if false;
+      }
+      match /appointments/{appointmentId} {
+        allow read, write: if false;
+      }
+      match /journeys/{journeyId} {
+        allow read, write: if false;
+      }
+    }
+
+    // 2. Usuários do Sistema (Autenticação RBAC e Tenant ID)
+    match /users/{userId} {
+      // Leitura e atualização exigem estar autenticado — nunca mais
+      // "if true" (que expunha perfil, e-mail e papel de todos os
+      // usuários de todas as clínicas, sem login nenhum).
+      allow read: if isSignedIn() && (request.auth.uid == userId || belongsToClinic(resource.data.clinicId));
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+
+      // Criação fechada por completo (correção de auditoria #4,
+      // concluída) — mesma razão de "create" em /clinics acima: o
+      // cadastro de usuários de demonstração agora escreve via Admin
+      // SDK (adminSetDocument()), que ignora estas regras. A validação
+      // real de senha continua acontecendo em verifyPassword()
+      // (lib/db/firestore.ts) no momento do login, com hash PBKDF2 —
+      // estas regras nunca foram a barreira contra login indevido, só
+      // contra leitura/escrita direta ao Firestore.
+      allow create: if false;
+    }
+
+    // 3. Fallback de Segurança — nega tudo que não foi explicitamente
+    // liberado acima.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
