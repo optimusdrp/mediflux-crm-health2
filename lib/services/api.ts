@@ -342,54 +342,6 @@ export const apiService = {
     });
   },
 
-  // 11.1 WhatsApp Web.js (Puppeteer Engine & LocalAuth)
-  async getWhatsAppWebSession() {
-    return authFetch<{
-      session: {
-        clinicId: string;
-        status: 'disconnected' | 'connecting' | 'qr_ready' | 'authenticated' | 'ready' | 'error';
-        qrCode?: string;
-        qrExpiresAt?: number;
-        sessionName: string;
-        batteryLevel?: number;
-        pushname?: string;
-        wid?: string;
-        platform?: string;
-        lastSeen?: string;
-        headless: boolean;
-        authStrategy: 'LocalAuth' | 'RemoteAuth' | 'Legacy';
-        autoRestart: boolean;
-        webhookUrl?: string;
-        messagesSentToday: number;
-        messagesReceivedToday: number;
-        puppeteerConfig: {
-          chromiumPath: string;
-          noSandbox: boolean;
-          disableGpu: boolean;
-        };
-      };
-      library: {
-        name: string;
-        version: string;
-        description: string;
-        engine: string;
-        supportedFeatures: string[];
-      };
-    }>('/api/settings/whatsapp-web-js');
-  },
-
-  async executeWhatsAppWebAction(action: 'start_client' | 'connect_no_qr' | 'direct_connect' | 'refresh_qr' | 'simulate_scan' | 'disconnect' | 'update_config' | 'test_send' | 'simulate_inbound', config?: any) {
-    return authFetch<{
-      success: boolean;
-      message: string;
-      session: any;
-      details?: any;
-    }>('/api/settings/whatsapp-web-js', {
-      method: 'POST',
-      body: JSON.stringify({ action, config }),
-    });
-  },
-
   // 12. Webhooks
   async getWebhooks() {
     return authFetch<{ webhooks: Webhook[]; logs: WebhookLog[] }>('/api/webhooks');

@@ -6,16 +6,17 @@ import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
 
 // ---------------------------------------------------------------------------
-// Conexão REAL com WhatsApp (lib/whatsapp/, via whatsapp-web.js) — painel
-// deliberadamente separado do restante da seção "WhatsApp Web.js" acima
-// (que é uma simulação/demonstração, ligada a app/api/settings/whatsapp-web-js,
-// não a uma sessão de fato). Este painel é a única parte desta tela que
-// abre um Chromium de verdade e troca mensagens reais.
+// Conexão REAL com WhatsApp — via Evolution API (REST), rodando na AWS
+// (ECS Fargate). Migrado de whatsapp-web.js/Puppeteer (que abria um
+// Chromium local e era a causa raiz da instabilidade que motivou a
+// migração para essa arquitetura). O painel de simulação/demonstração
+// que existia nesta tela (ligado a app/api/settings/whatsapp-web-js)
+// foi removido — este é o único painel de conexão de WhatsApp da tela.
 //
-// Duas formas de autenticar uma conexão nova (ver lib/whatsapp/sessionManager.ts
-// para a implementação completa): QR code (escaneado pela câmera) ou
-// código de pareamento por telefone (a clínica digita o número, recebe
-// um código de 8 dígitos direto no WhatsApp, e digita esse código aqui).
+// Duas formas de autenticar uma conexão nova: QR code (escaneado pela
+// câmera) ou código de pareamento por telefone. O backend correspondente
+// é a rota /settings/whatsapp-connection da Lambda core-api, que chama
+// a Evolution API diretamente (ver lib/evolutionApi.ts na Lambda).
 // ---------------------------------------------------------------------------
 
 type WaStatus = 'disconnected' | 'initializing' | 'qr_pending' | 'phone_code_pending' | 'syncing_history' | 'connected' | 'auth_failed';
