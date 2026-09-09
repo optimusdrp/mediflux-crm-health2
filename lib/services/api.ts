@@ -21,6 +21,8 @@ import {
   LeadQualificationResult,
   SentimentAnalysisResult,
   Role,
+  Funnel,
+  FunnelStage,
 } from '../types';
 
 export const apiService = {
@@ -308,6 +310,55 @@ export const apiService = {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
+  },
+
+  // 11.5 Gestão de Funis & Etapas — CRUD completo, rotas novas nesta
+  // migração (a tela original era só leitura, sem nenhuma destas
+  // operações existir de fato).
+  async createFunnel(name: string) {
+    return authFetch<{ funnel: Funnel; funnels: Funnel[] }>('/api/funnels', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async updateFunnel(funnelId: string, updates: { name?: string; isDefault?: boolean }) {
+    return authFetch<{ funnels: Funnel[] }>('/api/funnels', {
+      method: 'PUT',
+      body: JSON.stringify({ funnelId, ...updates }),
+    });
+  },
+
+  async deleteFunnel(funnelId: string, force = false) {
+    return authFetch<{ success: boolean; funnels: Funnel[]; patientsReassigned: number }>(
+      `/api/funnels?funnelId=${encodeURIComponent(funnelId)}${force ? '&force=true' : ''}`,
+      { method: 'DELETE' }
+    );
+  },
+
+  async createFunnelStage(funnelId: string, stage: { name: string; color?: string; requiredFields?: string[]; lockAdvanceWithoutRequiredFields?: boolean }) {
+    return authFetch<{ stage: FunnelStage; funnels: Funnel[] }>('/api/funnels/stages', {
+      method: 'POST',
+      body: JSON.stringify({ funnelId, ...stage }),
+    });
+  },
+
+  async updateFunnelStage(
+    funnelId: string,
+    stageId: string,
+    updates: { name?: string; color?: string; order?: number; requiredFields?: string[]; lockAdvanceWithoutRequiredFields?: boolean }
+  ) {
+    return authFetch<{ funnels: Funnel[] }>('/api/funnels/stages', {
+      method: 'PUT',
+      body: JSON.stringify({ funnelId, stageId, ...updates }),
+    });
+  },
+
+  async deleteFunnelStage(funnelId: string, stageId: string, force = false) {
+    return authFetch<{ success: boolean; funnels: Funnel[]; patientsReassigned: number }>(
+      `/api/funnels/stages?funnelId=${encodeURIComponent(funnelId)}&stageId=${encodeURIComponent(stageId)}${force ? '&force=true' : ''}`,
+      { method: 'DELETE' }
+    );
   },
 
   // 12. Webhooks

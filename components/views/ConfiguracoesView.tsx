@@ -38,6 +38,7 @@ import {
   Lock,
   Plus,
   Trash2,
+  X,
   Send,
   AlertTriangle,
   Search,
@@ -284,6 +285,92 @@ export function ConfiguracoesView() {
     const fieldError = validateIdentityField(field, value);
     setIdentityErrors((prev) => ({ ...prev, [field]: fieldError || undefined }));
     markDirty();
+  };
+
+  // --- Gestão de Funis & Etapas: estado de UI e handlers de CRUD real ---
+  // (Antes desta migração, a aba "2. Gestão de Funis & Etapas" era só
+  // leitura — settings?.funnels.map() sem nenhum botão de ação. Os
+  // estados e handlers abaixo implementam a funcionalidade completa.)
+  const [newFunnelName, setNewFunnelName] = useState('');
+  const [isCreatingFunnel, setIsCreatingFunnel] = useState(false);
+  const [newStageNameByFunnel, setNewStageNameByFunnel] = useState<Record<string, string>>({});
+  const [isCreatingStageFor, setIsCreatingStageFor] = useState<string | null>(null);
+  const [funnelActionError, setFunnelActionError] = useState<string | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<
+    { type: 'funnel'; funnelId: string; name: string } | { type: 'stage'; funnelId: string; stageId: string; name: string } | null
+  >(null);
+
+  const refreshSettingsAfterFunnelChange = (updatedFunnels: Funnel[]) => {
+    setSettings((prev) => (prev ? { ...prev, funnels: updatedFunnels } : prev));
+  };
+
+  const handleCreateFunnel = async () => {
+    if (!newFunnelName.trim()) return;
+    setIsCreatingFunnel(true);
+    setFunnelActionError(null);
+    try {
+      const res = await apiService.createFunnel(newFunnelName.trim());
+      refreshSettingsAfterFunnelChange(res.funnels);
+      setNewFunnelName('');
+      success('Funil criado', `"${res.funnel.name}" foi adicionado. Agora adicione as etapas.`);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao criar funil';
+      error('Falha ao criar funil', msg);
+    } finally {
+      setIsCreatingFunnel(false);
+    }
+  };
+
+  const handleCreateStage = async (funnelId: string) => {
+    const name = (newStageNameByFunnel[funnelId] || '').trim();
+    if (!name) return;
+    setIsCreatingStageFor(funnelId);
+    setFunnelActionError(null);
+    try {
+      const res = await apiService.createFunnelStage(funnelId, { name });
+      refreshSettingsAfterFunnelChange(res.funnels);
+      setNewStageNameByFunnel((prev) => ({ ...prev, [funnelId]: '' }));
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao criar etapa';
+      error('Falha ao criar etapa', msg);
+    } finally {
+      setIsCreatingStageFor(null);
+    }
+  };
+
+  const executeDeleteFunnel = async (funnelId: string, force: boolean) => {
+    try {
+      const res = await apiService.deleteFunnel(funnelId, force);
+      refreshSettingsAfterFunnelChange(res.funnels);
+      setPendingDeletion(null);
+      success('Funil excluído', res.patientsReassigned > 0 ? `${res.patientsReassigned} paciente(s) foram remanejados automaticamente.` : 'Funil removido com sucesso.');
+    } catch (err: unknown) {
+      const apiError = err as { message?: string; blocked?: boolean; affectedPatientsCount?: number };
+      if (apiError.blocked) {
+        // Mantém o modal aberto, mas agora com a opção de forçar visível (ver JSX).
+        setFunnelActionError(apiError.message || 'Este funil possui pacientes vinculados.');
+      } else {
+        error('Falha ao excluir funil', apiError.message || 'Erro ao excluir');
+        setPendingDeletion(null);
+      }
+    }
+  };
+
+  const executeDeleteStage = async (funnelId: string, stageId: string, force: boolean) => {
+    try {
+      const res = await apiService.deleteFunnelStage(funnelId, stageId, force);
+      refreshSettingsAfterFunnelChange(res.funnels);
+      setPendingDeletion(null);
+      success('Etapa excluída', res.patientsReassigned > 0 ? `${res.patientsReassigned} paciente(s) foram remanejados automaticamente.` : 'Etapa removida com sucesso.');
+    } catch (err: unknown) {
+      const apiError = err as { message?: string; blocked?: boolean; affectedPatientsCount?: number };
+      if (apiError.blocked) {
+        setFunnelActionError(apiError.message || 'Esta etapa possui pacientes vinculados.');
+      } else {
+        error('Falha ao excluir etapa', apiError.message || 'Erro ao excluir');
+        setPendingDeletion(null);
+      }
+    }
   };
 
   // Load Initial Configuration Data
@@ -856,12 +943,40 @@ export function ConfiguracoesView() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Jornadas Clínicas & Funis Customizados</h3>
-                  <p className="text-slate-500">Controle a passagem de bastão entre recepção, enfermagem e consultório médico.</p>
+                  <p className="text-slate-500">Crie e organize os funis e etapas da jornada do paciente do seu jeito — recepção, triagem, consultório, o que fizer sentido para a clínica.</p>
                 </div>
               </div>
 
+              {/* Criar novo funil */}
+              <div className="p-4 bg-sky-50/60 rounded-2xl border border-sky-200/60 flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block font-semibold text-slate-600 mb-1">Nome do novo funil</label>
+                  <input
+                    type="text"
+                    placeholder="Ex.: Funil de Retorno, Funil Cirúrgico..."
+                    value={newFunnelName}
+                    onChange={(e) => setNewFunnelName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateFunnel()}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                  />
+                </div>
+                <button
+                  onClick={handleCreateFunnel}
+                  disabled={!newFunnelName.trim() || isCreatingFunnel}
+                  className="px-4 py-2 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {isCreatingFunnel ? 'Criando...' : 'Novo Funil'}
+                </button>
+              </div>
+
               <div className="space-y-4">
-                {settings?.funnels.map((funnel) => (
+                {(settings?.funnels || []).length === 0 && (
+                  <div className="text-center py-8 text-slate-400">
+                    Nenhum funil criado ainda. Use o campo acima para criar o primeiro.
+                  </div>
+                )}
+                {(settings?.funnels || []).map((funnel) => (
                   <div key={funnel.id} className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -873,9 +988,21 @@ export function ConfiguracoesView() {
                           </span>
                         )}
                       </div>
-                      <span className="text-slate-500 font-medium">
-                        {funnel.stages.length} etapas sequenciais
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-500 font-medium">
+                          {funnel.stages.length} etapa{funnel.stages.length !== 1 ? 's' : ''}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setFunnelActionError(null);
+                            setPendingDeletion({ type: 'funnel', funnelId: funnel.id, name: funnel.name });
+                          }}
+                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded-lg transition-all"
+                          title="Excluir funil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Funnel Stages List */}
@@ -892,6 +1019,16 @@ export function ConfiguracoesView() {
                               </span>
                               {st.name}
                             </span>
+                            <button
+                              onClick={() => {
+                                setFunnelActionError(null);
+                                setPendingDeletion({ type: 'stage', funnelId: funnel.id, stageId: st.id, name: st.name });
+                              }}
+                              className="text-slate-400 hover:text-rose-600 transition-colors"
+                              title="Excluir etapa"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
 
                           <div className="text-[11px] text-slate-500">
@@ -916,10 +1053,70 @@ export function ConfiguracoesView() {
                           </div>
                         </div>
                       ))}
+
+                      {/* Adicionar nova etapa */}
+                      <div className="p-3 bg-white/60 rounded-xl border border-dashed border-slate-300 flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Nova etapa..."
+                          value={newStageNameByFunnel[funnel.id] || ''}
+                          onChange={(e) => setNewStageNameByFunnel((prev) => ({ ...prev, [funnel.id]: e.target.value }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleCreateStage(funnel.id)}
+                          className="flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg text-[11px]"
+                        />
+                        <button
+                          onClick={() => handleCreateStage(funnel.id)}
+                          disabled={!(newStageNameByFunnel[funnel.id] || '').trim() || isCreatingStageFor === funnel.id}
+                          className="shrink-0 p-1.5 bg-sky-100 text-sky-700 rounded-lg hover:bg-sky-200 disabled:opacity-40"
+                          title="Adicionar etapa"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Confirmação de exclusão (funil ou etapa) */}
+              {pendingDeletion && (
+                <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Excluir {pendingDeletion.type === 'funnel' ? 'funil' : 'etapa'} "{pendingDeletion.name}"?
+                    </h4>
+                    {funnelActionError ? (
+                      <>
+                        <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">{funnelActionError}</p>
+                        <p className="text-slate-500">Os pacientes vinculados serão remanejados automaticamente para outra etapa/funil disponível.</p>
+                      </>
+                    ) : (
+                      <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+                    )}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        onClick={() => {
+                          setPendingDeletion(null);
+                          setFunnelActionError(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() =>
+                          pendingDeletion.type === 'funnel'
+                            ? executeDeleteFunnel(pendingDeletion.funnelId, !!funnelActionError)
+                            : executeDeleteStage(pendingDeletion.funnelId, pendingDeletion.stageId, !!funnelActionError)
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold"
+                      >
+                        {funnelActionError ? 'Excluir e remanejar' : 'Excluir'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
