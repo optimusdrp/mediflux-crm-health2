@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { WhatsAppQRCodeViewer } from '@/components/WhatsAppQRCodeViewer';
 import { WhatsAppRealConnectionPanel } from '@/components/WhatsAppRealConnectionPanel';
+import { validateIdentityField, validateIdentityForm, maskCNPJ, maskTelefone, IdentityFieldKey } from '@/lib/validators/clinicIdentity';
 import {
   Settings,
   Building2,
@@ -262,6 +263,29 @@ export function ConfiguracoesView() {
     });
   }, [clinic]);
 
+  // Erros de validação por campo — populado em tempo real ao digitar
+  // (handleIdentityFieldChange) e no submit final (handleSave).
+  const [identityErrors, setIdentityErrors] = useState<Partial<Record<IdentityFieldKey, string>>>({});
+
+  /**
+   * Atualiza um campo de identityData aplicando máscara (quando o
+   * campo tiver uma) e validando o novo valor, guardando o erro (ou
+   * limpando, se válido) em identityErrors. Usada por todos os
+   * inputs da aba "1. Identidade & Unidades" em vez de cada um
+   * chamar setIdentityData diretamente, para centralizar a validação
+   * num único lugar.
+   */
+  const handleIdentityFieldChange = (field: IdentityFieldKey, rawValue: string) => {
+    let value = rawValue;
+    if (field === 'cnpj') value = maskCNPJ(rawValue);
+    if (field === 'telefonePrincipal' || field === 'whatsappAtendimento') value = maskTelefone(rawValue);
+
+    setIdentityData((prev) => ({ ...prev, [field]: value }));
+    const fieldError = validateIdentityField(field, value);
+    setIdentityErrors((prev) => ({ ...prev, [field]: fieldError || undefined }));
+    markDirty();
+  };
+
   // Load Initial Configuration Data
   useEffect(() => {
     let isMounted = true;
@@ -297,6 +321,24 @@ export function ConfiguracoesView() {
 
   const handleSave = async () => {
     if (!settings) return;
+
+    const formErrors = validateIdentityForm({
+      razaoSocial: identityData.razaoSocial,
+      nomeFantasia: identityData.nomeFantasia,
+      cnpj: identityData.cnpj,
+      cnes: identityData.cnes,
+      rtNome: identityData.rtNome,
+      rtCrm: identityData.rtCrm,
+      telefonePrincipal: identityData.telefonePrincipal,
+      whatsappAtendimento: identityData.whatsappAtendimento,
+      endereco: identityData.endereco,
+    });
+    if (Object.keys(formErrors).length > 0) {
+      setIdentityErrors(formErrors);
+      error('Corrija os campos destacados', 'Alguns dados de Identidade & Unidades estão incompletos ou em formato inválido.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const [, updatedClinic] = await Promise.all([
@@ -674,48 +716,50 @@ export function ConfiguracoesView() {
                   <input
                     type="text"
                     value={identityData.razaoSocial}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, razaoSocial: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                    onChange={(e) => handleIdentityFieldChange('razaoSocial', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 ${
+                      identityErrors.razaoSocial ? 'border-rose-400' : 'border-slate-300'
+                    }`}
                   />
+                  {identityErrors.razaoSocial && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.razaoSocial}</p>}
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Nome Fantasia da Clínica</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Nome Fantasia da Clínica <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={identityData.nomeFantasia}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, nomeFantasia: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                    onChange={(e) => handleIdentityFieldChange('nomeFantasia', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 ${
+                      identityErrors.nomeFantasia ? 'border-rose-400' : 'border-slate-300'
+                    }`}
                   />
+                  {identityErrors.nomeFantasia && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.nomeFantasia}</p>}
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">CNPJ (Receita Federal)</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    placeholder="00.000.000/0000-00"
                     value={identityData.cnpj}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, cnpj: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    onChange={(e) => handleIdentityFieldChange('cnpj', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl font-mono ${identityErrors.cnpj ? 'border-rose-400' : 'border-slate-300'}`}
                   />
+                  {identityErrors.cnpj && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.cnpj}</p>}
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Código CNES (Datasus)</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    placeholder="0000000"
                     value={identityData.cnes}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, cnes: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    onChange={(e) => handleIdentityFieldChange('cnes', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl font-mono ${identityErrors.cnes ? 'border-rose-400' : 'border-slate-300'}`}
                   />
+                  {identityErrors.cnes && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.cnes}</p>}
                 </div>
               </div>
 
@@ -731,24 +775,21 @@ export function ConfiguracoesView() {
                     <input
                       type="text"
                       value={identityData.rtNome}
-                      onChange={(e) => {
-                        setIdentityData({ ...identityData, rtNome: e.target.value });
-                        markDirty();
-                      }}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                      onChange={(e) => handleIdentityFieldChange('rtNome', e.target.value)}
+                      className={`w-full px-3 py-1.5 bg-white border rounded-lg ${identityErrors.rtNome ? 'border-rose-400' : 'border-slate-300'}`}
                     />
+                    {identityErrors.rtNome && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.rtNome}</p>}
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-600 mb-1">Registro Profissional (CRM/UF)</label>
                     <input
                       type="text"
+                      placeholder="CRM/SP 123456"
                       value={identityData.rtCrm}
-                      onChange={(e) => {
-                        setIdentityData({ ...identityData, rtCrm: e.target.value });
-                        markDirty();
-                      }}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono"
+                      onChange={(e) => handleIdentityFieldChange('rtCrm', e.target.value)}
+                      className={`w-full px-3 py-1.5 bg-white border rounded-lg font-mono ${identityErrors.rtCrm ? 'border-rose-400' : 'border-slate-300'}`}
                     />
+                    {identityErrors.rtCrm && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.rtCrm}</p>}
                   </div>
                 </div>
               </div>
@@ -756,40 +797,40 @@ export function ConfiguracoesView() {
               {/* Contato e Horários */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Telefone Principal (PABX / SAC)</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Telefone Principal (PABX / SAC) <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
+                    inputMode="tel"
+                    placeholder="(00) 00000-0000"
                     value={identityData.telefonePrincipal}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, telefonePrincipal: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    onChange={(e) => handleIdentityFieldChange('telefonePrincipal', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl ${identityErrors.telefonePrincipal ? 'border-rose-400' : 'border-slate-300'}`}
                   />
+                  {identityErrors.telefonePrincipal && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.telefonePrincipal}</p>}
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">WhatsApp Oficial de Atendimento</label>
                   <input
                     type="text"
+                    inputMode="tel"
+                    placeholder="(00) 00000-0000"
                     value={identityData.whatsappAtendimento}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, whatsappAtendimento: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    onChange={(e) => handleIdentityFieldChange('whatsappAtendimento', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl font-mono ${identityErrors.whatsappAtendimento ? 'border-rose-400' : 'border-slate-300'}`}
                   />
+                  {identityErrors.whatsappAtendimento && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.whatsappAtendimento}</p>}
                 </div>
                 <div className="md:col-span-2">
                   <label className="block font-bold text-slate-700 mb-1">Endereço Completo da Unidade</label>
                   <input
                     type="text"
                     value={identityData.endereco}
-                    onChange={(e) => {
-                      setIdentityData({ ...identityData, endereco: e.target.value });
-                      markDirty();
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    onChange={(e) => handleIdentityFieldChange('endereco', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-xl ${identityErrors.endereco ? 'border-rose-400' : 'border-slate-300'}`}
                   />
+                  {identityErrors.endereco && <p className="mt-1 text-rose-600 font-semibold">{identityErrors.endereco}</p>}
                 </div>
                 <div className="md:col-span-2">
                   <label className="block font-bold text-slate-700 mb-1">Horário de Funcionamento para Pacientes</label>
