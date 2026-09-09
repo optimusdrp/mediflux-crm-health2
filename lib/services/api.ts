@@ -75,51 +75,6 @@ export const apiService = {
     });
   },
 
-  async getDynaliteStatus() {
-    return authFetch<{
-      status: {
-        online: boolean;
-        port: number;
-        tables: string[];
-        userCount: number;
-        engine: string;
-      };
-      totalRegisteredUsers: number;
-      users: Array<{
-        email: string;
-        name: string;
-        role: string;
-        clinicId: string;
-        active: boolean;
-      }>;
-      timestamp: string;
-    }>('/api/auth/dynalite-status');
-  },
-
-  async getFirestoreStatus() {
-    return authFetch<{
-      status: {
-        connected: boolean;
-        projectId: string;
-        databaseId: string;
-        collection: string;
-        provider: string;
-      };
-      totalRegisteredUsers: number;
-      users: Array<{
-        id: string;
-        email: string;
-        name: string;
-        role: string;
-        clinicId: string;
-        crm?: string;
-        specialty?: string;
-        active: boolean;
-      }>;
-      timestamp: string;
-    }>('/api/auth/firestore-status');
-  },
-
   async simulateTrial(mode: 'active_7_days' | 'expiring_soon_36h' | 'expiring_soon_12h' | 'expired', email?: string) {
     return authFetch<{
       success: boolean;
@@ -338,6 +293,19 @@ export const apiService = {
   async saveClinicSettings(payload: Partial<ClinicSettings> & { rolePermissions?: any[] }) {
     return authFetch<{ success: boolean; settings: ClinicSettings }>('/api/settings', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Persiste os dados de identidade institucional da clínica (Configurações
+   * → "1. Identidade & Unidades"). Rota nova nesta migração — no projeto
+   * original esses dados existiam só como estado local (identityData),
+   * nunca eram de fato salvos, mesmo clicando em "Salvar".
+   */
+  async saveClinicIdentity(payload: Partial<Clinic>) {
+    return authFetch<{ clinic: Clinic }>('/api/clinic', {
+      method: 'PUT',
       body: JSON.stringify(payload),
     });
   },

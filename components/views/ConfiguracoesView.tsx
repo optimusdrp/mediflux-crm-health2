@@ -178,7 +178,7 @@ const ALL_ACTIONS: { id: SensitiveAction; label: string; danger?: boolean }[] = 
 ];
 
 export function ConfiguracoesView() {
-  const { user, subscription } = useAuth();
+  const { user, subscription, clinic, updateClinic } = useAuth();
   const { success, error, warning } = useToast();
 
   const [activeSubTab, setActiveSubTab] = useState<number>(0);
@@ -222,66 +222,45 @@ export function ConfiguracoesView() {
   const [editingEhr, setEditingEhr] = useState<EHRIntegration | null>(null);
   const [ehrApiKeyInput, setEhrApiKeyInput] = useState('');
 
-  // Firestore Seeding & Multi-Tenant State
-  const [isSeedingFirestore, setIsSeedingFirestore] = useState(false);
-  const [firestoreStatus, setFirestoreStatus] = useState<{
-    connected: boolean;
-    projectId: string;
-    databaseId: string;
-    totalUsers: number;
-    users: any[];
-  } | null>(null);
-
-  const fetchFirestoreStatus = async () => {
-    try {
-      const res = await apiService.getFirestoreStatus();
-      if (res?.status) {
-        setFirestoreStatus({
-          connected: res.status.connected,
-          projectId: res.status.projectId,
-          databaseId: res.status.databaseId,
-          totalUsers: res.totalRegisteredUsers,
-          users: res.users,
-        });
-      }
-    } catch (err) {
-      console.error('Erro ao consultar status do Firestore:', err);
-    }
-  };
-
-  const handleSeedFirestore = async () => {
-    setIsSeedingFirestore(true);
-    try {
-      const res = await fetch('/api/admin/seed-firestore', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        success('Firestore Populado', `4 Usuários de teste e a clínica CardioVida foram registrados no Firestore com sucesso! (${data.totalUsers} registros verificados)`);
-        await fetchFirestoreStatus();
-      } else {
-        error('Falha ao Popular', data.error || 'Não foi possível gravar no Firestore');
-      }
-    } catch (err: any) {
-      error('Erro de Conexão', err.message || 'Falha ao conectar com o Firestore');
-    } finally {
-      setIsSeedingFirestore(false);
-    }
-  };
-
   // Identidade extra fields
   const [identityData, setIdentityData] = useState({
-    razaoSocial: 'Clínica CardioVida & Saúde Integrada Ltda.',
-    nomeFantasia: 'CardioVida Especialidades',
-    cnpj: '18.234.567/0001-89',
-    cnes: '7492810',
-    rtNome: 'Dr. Roberto Vasconcelos',
-    rtCrm: 'CRM/SP 142.890',
-    telefonePrincipal: '(11) 3456-7890',
-    whatsappAtendimento: '(11) 98877-6655',
-    emailContato: 'contato@cardiovida.com.br',
-    endereco: 'Alameda Santos, 1470 - 8º andar - Cerqueira César, São Paulo - SP, 01418-100',
+    razaoSocial: '',
+    nomeFantasia: '',
+    cnpj: '',
+    cnes: '',
+    rtNome: '',
+    rtCrm: '',
+    telefonePrincipal: '',
+    whatsappAtendimento: '',
+    emailContato: '',
+    endereco: '',
     fusoHorario: 'America/Sao_Paulo (UTC-3:00)',
-    horarioFuncionamento: 'Segunda a Sexta: 07h às 20h | Sábados: 08h às 14h',
+    horarioFuncionamento: '',
   });
+
+  // Popula identityData com os dados REAIS da clínica logada, assim
+  // que o AuthContext os disponibilizar (login ou recarregamento de
+  // página via GET /auth/me). Corrige o comportamento anterior: os
+  // campos vinham hard-coded com dados fictícios de exemplo
+  // ("CardioVida Especialidades" etc.) e nunca refletiam a clínica
+  // real do usuário logado, nem eram persistidos ao salvar.
+  useEffect(() => {
+    if (!clinic) return;
+    setIdentityData({
+      razaoSocial: clinic.razaoSocial || '',
+      nomeFantasia: clinic.name || '',
+      cnpj: clinic.cnpj || '',
+      cnes: clinic.cnes || '',
+      rtNome: clinic.rtNome || '',
+      rtCrm: clinic.rtCrm || '',
+      telefonePrincipal: clinic.phone || '',
+      whatsappAtendimento: clinic.whatsappAtendimento || '',
+      emailContato: clinic.emailContato || '',
+      endereco: clinic.address || '',
+      fusoHorario: clinic.fusoHorario || 'America/Sao_Paulo (UTC-3:00)',
+      horarioFuncionamento: clinic.horarioFuncionamento || '',
+    });
+  }, [clinic]);
 
   // Load Initial Configuration Data
   useEffect(() => {
@@ -300,7 +279,6 @@ export function ConfiguracoesView() {
           setEhrList(ehrRes.integrations);
           setWebhooks(whRes.webhooks);
           setWebhookLogs(whRes.logs || []);
-          fetchFirestoreStatus();
         }
       } catch (err: unknown) {
         const msg = (err as { message?: string })?.message || 'Erro de rede';
@@ -321,10 +299,27 @@ export function ConfiguracoesView() {
     if (!settings) return;
     setIsSaving(true);
     try {
-      await apiService.saveClinicSettings({
-        ...settings,
-        rolePermissions: permissions,
-      });
+      const [, updatedClinic] = await Promise.all([
+        apiService.saveClinicSettings({
+          ...settings,
+          rolePermissions: permissions,
+        }),
+        apiService.saveClinicIdentity({
+          name: identityData.nomeFantasia,
+          razaoSocial: identityData.razaoSocial,
+          cnpj: identityData.cnpj,
+          cnes: identityData.cnes,
+          rtNome: identityData.rtNome,
+          rtCrm: identityData.rtCrm,
+          phone: identityData.telefonePrincipal,
+          whatsappAtendimento: identityData.whatsappAtendimento,
+          emailContato: identityData.emailContato,
+          address: identityData.endereco,
+          fusoHorario: identityData.fusoHorario,
+          horarioFuncionamento: identityData.horarioFuncionamento,
+        }),
+      ]);
+      updateClinic(updatedClinic.clinic);
       setHasUnsavedChanges(false);
       success('Configurações Salvas com Sucesso', 'Todas as 10 áreas de governança foram atualizadas e registradas em auditoria LGPD.');
     } catch (err: unknown) {
@@ -1651,114 +1646,6 @@ export function ConfiguracoesView() {
                 ))}
               </div>
 
-              {/* Firestore Multi-Tenant & Test Users Seeding Card */}
-              <div className="p-5 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 rounded-2xl border border-sky-800/60 shadow-xl text-white space-y-4">
-                <div className="flex items-start justify-between flex-wrap gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                        <Database className="w-4 h-4" />
-                      </span>
-                      <h4 className="font-bold text-sm text-white">Google Cloud Firestore — Isolamento Multi-Tenant</h4>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                        Regras de Segurança Ativas
-                      </span>
-                    </div>
-                    <p className="text-slate-400 text-[11px] max-w-2xl">
-                      Banco de dados NoSQL gerenciado em nuvem com particionamento estrito por <code className="text-sky-300 bg-slate-800 px-1 py-0.5 rounded">clinicId</code> e autenticação RBAC via PBKDF2.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={fetchFirestoreStatus}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-[11px] font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      Checar Status
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSeedFirestore}
-                      disabled={isSeedingFirestore}
-                      className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-lg shadow-sky-950 transition-all disabled:opacity-50"
-                    >
-                      <Database className={`w-3.5 h-3.5 ${isSeedingFirestore ? 'animate-spin' : ''}`} />
-                      {isSeedingFirestore ? 'Populando Firestore...' : 'Popular 4 Usuários de Teste'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Firestore Database & Rules Metadata */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Database ID</div>
-                    <div className="text-xs font-mono font-bold text-sky-400 truncate mt-0.5">
-                      {firestoreStatus?.databaseId || 'ai-studio-medifluxcrmhealt-c70fd804-3280-47c9-aec3-ac790f225cc0'}
-                    </div>
-                  </div>
-                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Isolamento Multi-Tenant</div>
-                    <div className="text-xs font-semibold text-emerald-400 mt-0.5 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{'/clinics/{clinicId}/*'}</span>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Usuários Registrados</div>
-                    <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">
-                      {firestoreStatus?.totalUsers ?? 5} contas ativas
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4 Test Users Scoped Details */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                  <div className="text-[11px] font-bold text-slate-300">Usuários de Teste Pré-Configurados no Firestore:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                    <div className="p-2.5 bg-slate-950/90 rounded-xl border border-slate-800/80 text-[11px] space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-indigo-300">Admin Geral</span>
-                        <span className="text-[9px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-1.5 py-0.2 rounded font-bold">RBAC Total</span>
-                      </div>
-                      <div className="text-slate-300 font-medium truncate">Dr. Roberto Vasconcelos</div>
-                      <div className="text-slate-500 text-[10px] truncate">admin@cardiovida.com.br</div>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-950/90 rounded-xl border border-slate-800/80 text-[11px] space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sky-300">Médico</span>
-                        <span className="text-[9px] bg-sky-950 text-sky-300 border border-sky-800 px-1.5 py-0.2 rounded font-bold">CRM 189.432</span>
-                      </div>
-                      <div className="text-slate-300 font-medium truncate">Dra. Camila Albuquerque</div>
-                      <div className="text-slate-500 text-[10px] truncate">camila.med@cardiovida.com.br</div>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-950/90 rounded-xl border border-slate-800/80 text-[11px] space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-emerald-300">Recepção</span>
-                        <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-1.5 py-0.2 rounded font-bold">Triagem</span>
-                      </div>
-                      <div className="text-slate-300 font-medium truncate">Juliana Mendes</div>
-                      <div className="text-slate-500 text-[10px] truncate">recepcao@cardiovida.com.br</div>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-950/90 rounded-xl border border-slate-800/80 text-[11px] space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-amber-300">Financeiro</span>
-                        <span className="text-[9px] bg-amber-950 text-amber-300 border border-amber-800 px-1.5 py-0.2 rounded font-bold">TISS/Fatur</span>
-                      </div>
-                      <div className="text-slate-300 font-medium truncate">Carlos Eduardo Peixoto</div>
-                      <div className="text-slate-500 text-[10px] truncate">financeiro@cardiovida.com.br</div>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1">
-                    <span>Senha padrão de teste para todos os perfis: <code className="text-sky-300 bg-slate-800 px-1.5 py-0.5 rounded font-mono font-bold">cardiovida2026</code></span>
-                    <span className="text-slate-500">Script CLI: <code className="text-slate-300 font-mono">npm run seed:firestore</code></span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -44,6 +44,14 @@ export interface Clinic {
   phone: string;
   address: string;
   logoUrl?: string;
+  razaoSocial?: string;
+  cnes?: string;
+  rtNome?: string;
+  rtCrm?: string;
+  whatsappAtendimento?: string;
+  emailContato?: string;
+  fusoHorario?: string;
+  horarioFuncionamento?: string;
 }
 
 export interface TrialInfo {

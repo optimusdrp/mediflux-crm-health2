@@ -29,6 +29,15 @@ interface AuthContextType {
   logout: () => void;
   switchRole: (role: Role) => Promise<void>;
   refreshSubscription: () => Promise<void>;
+  /**
+   * Atualiza o estado local de `clinic` com os dados retornados por
+   * PUT /clinic — usado por ConfiguracoesView após salvar a aba
+   * "Identidade & Unidades", para o resto da aplicação (ex.: o
+   * cabeçalho do simulador de Respostas Rápidas, que usa
+   * identityData.nomeFantasia) refletir a mudança sem precisar de um
+   * reload completo da página.
+   */
+  updateClinic: (clinic: Clinic) => void;
 }
 
 const DEFAULT_USERS_BY_ROLE: Record<Role, string> = {
@@ -151,6 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateClinic = (updatedClinic: Clinic) => {
+    setClinic(updatedClinic);
+  };
+
   // Inicialização da sessão a partir de token válido
   useEffect(() => {
     let isMounted = true;
@@ -264,6 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         switchRole,
         refreshSubscription,
+        updateClinic,
       }}
     >
       {children}
