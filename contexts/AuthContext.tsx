@@ -27,7 +27,6 @@ interface AuthContextType {
     acceptTerms: boolean;
   }) => Promise<void>;
   logout: () => void;
-  switchRole: (role: Role) => Promise<void>;
   refreshSubscription: () => Promise<void>;
   /**
    * Atualiza o estado local de `clinic` com os dados retornados por
@@ -39,14 +38,6 @@ interface AuthContextType {
    */
   updateClinic: (clinic: Clinic) => void;
 }
-
-const DEFAULT_USERS_BY_ROLE: Record<Role, string> = {
-  admin: 'admin@cardiovida.com.br',
-  recepcao: 'recepcao@cardiovida.com.br',
-  medico: 'camila.med@cardiovida.com.br',
-  financeiro: 'financeiro@cardiovida.com.br',
-  terceirizado: 'terceirizado@suportesaude.com.br',
-};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -143,13 +134,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // usuário já saiu do MediFlux (ver lib/security/firebaseClient.ts).
     void clearFirebaseAuthSession();
   }, []);
-
-  const switchRole = async (role: Role) => {
-    const targetEmail = DEFAULT_USERS_BY_ROLE[role];
-    if (targetEmail) {
-      await login(targetEmail, 'cardiovida2026');
-    }
-  };
 
   const refreshSubscription = async () => {
     try {
@@ -275,7 +259,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         registerTrial,
         logout,
-        switchRole,
         refreshSubscription,
         updateClinic,
       }}

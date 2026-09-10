@@ -1,67 +1,87 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Role } from '@/lib/types';
+import { apiService } from '@/lib/services/api';
+import { Unit } from '@/lib/types';
 import {
   HeartPulse,
   ShieldCheck,
-  Bell,
   Users,
-  Sparkles,
-  ChevronDown,
   Building2,
-  Lock,
-  Stethoscope,
-  DollarSign,
-  UserCheck,
-  Headphones,
-  ExternalLink,
-  Globe,
-  LogOut,
+  ChevronDown,
   Menu,
+  LogOut,
+  MapPin,
 } from 'lucide-react';
 
 interface HeaderProps {
   onOpenDuplicatesModal?: () => void;
   duplicatesCount?: number;
-  onNavigateToLandingPage?: () => void;
   onOpenUpgradeModal?: () => void;
+  onOpenProfileModal?: () => void;
   /**
    * Abre/fecha o menu lateral em telas pequenas (mobile/tablet
    * retrato) — correção de responsividade: o Sidebar antes era
    * sempre visível e fixo em 256px, o que em telas estreitas
-   * empurrava o conteúdo inteiro para fora da área visível (ver
-   * relato real do usuário, print do app em modo mobile). Em telas
-   * grandes (lg: e acima) este botão não aparece — o Sidebar
-   * continua sempre visível como antes.
+   * empurrava o conteúdo inteiro para fora da área visível.
    */
   onToggleSidebar?: () => void;
 }
 
+/**
+ * Header reescrito — mudanças pedidas pelo usuário:
+ *  1. Removido o botão "Landing Page" (link para a página pública).
+ *  2. Removido o "Alternador de Perfil RBAC" (switchRole) — não era
+ *     um seletor de conta, era um simulador de troca de papel que
+ *     fazia login real como outro usuário usando uma senha hard-coded
+ *     no código (mesmo backdoor já identificado e removido do texto
+ *     de login numa auditoria anterior, aqui ainda funcional). Removido
+ *     por completo, não só escondido.
+ *  3. No lugar dele: seletor de Unidades de Atendimento cadastradas
+ *     (Configurações → Identidade & Unidades → Gestão de Unidades).
+ *  4. Nome da unidade selecionada, ao lado do nome da clínica.
+ *  5. Avatar do usuário agora abre a página de Perfil (onOpenProfileModal).
+ *  6. Botão de duplicados só aparece para quem tem a permissão
+ *     'visualizar_duplicados' (admin sempre tem, por padrão).
+ */
 export function Header({
   onOpenDuplicatesModal,
   duplicatesCount = 0,
-  onNavigateToLandingPage,
   onOpenUpgradeModal,
+  onOpenProfileModal,
   onToggleSidebar,
 }: HeaderProps) {
-  const { user, clinic, subscription, switchRole, logout } = useAuth();
-  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
+  const { user, clinic, subscription, logout, hasActionPermission } = useAuth();
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [isUnitMenuOpen, setIsUnitMenuOpen] = useState(false);
 
-  const roles: { role: Role; label: string; icon: any; color: string }[] = [
-    { role: 'admin', label: 'Administrador (Gestão Total)', icon: ShieldCheck, color: 'text-purple-600 bg-purple-50 border-purple-200' },
-    { role: 'recepcao', label: 'Recepção (Atendimentos & Funil)', icon: Headphones, color: 'text-sky-600 bg-sky-50 border-sky-200' },
-    { role: 'medico', label: 'Profissional de Saúde / Médico', icon: Stethoscope, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    { role: 'financeiro', label: 'Contador / Financeiro', icon: DollarSign, color: 'text-amber-600 bg-amber-50 border-amber-200' },
-    { role: 'terceirizado', label: 'Terceirizado (Apenas Pendências)', icon: UserCheck, color: 'text-slate-600 bg-slate-50 border-slate-200' },
-  ];
+  useEffect(() => {
+    let isMounted = true;
+    apiService
+      .getUnits()
+      .then((res) => {
+        if (!isMounted) return;
+        setUnits(res.units || []);
+        const primary = res.units?.find((u) => u.isPrimary);
+        setSelectedUnitId((prev) => prev || primary?.id || res.units?.[0]?.id || '');
+      })
+      .catch(() => {
+        // Silencioso — a tela funciona normalmente sem o seletor populado;
+        // o nome da clínica sozinho já é exibido.
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  const currentRoleConfig = roles.find((r) => r.role === user?.role) || roles[0];
+  const selectedUnit = units.find((u) => u.id === selectedUnitId);
+  const canViewDuplicates = user?.role === 'admin' || hasActionPermission('visualizar_duplicados');
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between shadow-xs gap-2">
-      {/* Botão de menu (hambúrguer) — só em telas menores que lg, onde o Sidebar fica recolhido por padrão */}
+      {/* Botão de menu (hambúrguer) — só em telas menores que lg */}
       {onToggleSidebar && (
         <button
           onClick={onToggleSidebar}
@@ -77,7 +97,7 @@ export function Header({
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 flex items-center justify-center text-white shadow-sm shadow-sky-500/20 shrink-0">
           <HeartPulse className="w-6 h-6" />
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-900 text-base tracking-tight">MediFlux</span>
             <span className="text-[11px] font-semibold tracking-wider text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
@@ -87,34 +107,25 @@ export function Header({
               <ShieldCheck className="w-3 h-3" /> LGPD Ativo
             </span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-medium text-slate-700 truncate max-w-[220px] md:max-w-none">
-              {clinic?.name || 'Clínica CardioVida & Saúde Integrada'}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 min-w-0">
+            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="font-medium text-slate-700 truncate max-w-[140px] sm:max-w-[220px] md:max-w-none">
+              {clinic?.name || 'Minha Clínica'}
             </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500 hidden md:inline">{clinic?.unit || 'Unidade Jardins'}</span>
+            {selectedUnit && (
+              <>
+                <span className="text-slate-300 shrink-0">•</span>
+                <span className="text-slate-500 hidden md:inline truncate max-w-[160px]">{selectedUnit.name}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Right Controls: Plan badge, Duplicates alert, Role Switcher, Profile */}
+      {/* Right Controls: Duplicates alert, Plan badge, Unit selector, Profile */}
       <div className="flex items-center gap-2.5 sm:gap-4">
-        {/* Landing Page Link */}
-        {onNavigateToLandingPage && (
-          <button
-            onClick={onNavigateToLandingPage}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors shadow-xs"
-            title="Visualizar Landing Page pública do produto"
-          >
-            <Globe className="w-3.5 h-3.5 text-sky-600" />
-            <span>Landing Page</span>
-            <ExternalLink className="w-3 h-3 opacity-60" />
-          </button>
-        )}
-
-        {/* Duplicates notification shortcut */}
-        {duplicatesCount > 0 && onOpenDuplicatesModal && (
+        {/* Duplicates notification shortcut — só para quem tem permissão */}
+        {canViewDuplicates && duplicatesCount > 0 && onOpenDuplicatesModal && (
           <button
             onClick={onOpenDuplicatesModal}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors shadow-xs"
@@ -175,68 +186,70 @@ export function Header({
               <span className="font-semibold text-slate-900 capitalize">{subscription?.basePlan || 'Enterprise'}</span>
               <span className="text-slate-300">|</span>
               <span className="text-slate-500">
-                {subscription?.currentPeriodAppointments || 342} / {subscription?.maxAppointmentsPerMonth || 1000} atends.
+                {subscription?.currentPeriodAppointments || 0} / {subscription?.maxAppointmentsPerMonth || 1000} atends.
               </span>
             </>
           )}
         </div>
 
-        {/* Interactive RBAC Role Switcher (Crucial for verifying 2-layer permissions!) */}
-        <div className="relative">
-          <button
-            onClick={() => setIsRoleMenuOpen(!isRoleMenuOpen)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all shadow-xs ${currentRoleConfig.color}`}
-            id="role-switcher-button"
-          >
-            <currentRoleConfig.icon className="w-4 h-4" />
-            <span className="font-semibold">{currentRoleConfig.label.split(' ')[0]}</span>
-            <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-          </button>
+        {/* Unit Selector — substitui o antigo Alternador de Perfil RBAC */}
+        {units.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setIsUnitMenuOpen(!isUnitMenuOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs font-medium transition-all shadow-xs hover:bg-slate-100"
+              id="unit-selector-button"
+            >
+              <MapPin className="w-4 h-4 text-sky-600" />
+              <span className="font-semibold hidden sm:inline max-w-[120px] truncate">{selectedUnit?.name || 'Unidade'}</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+            </button>
 
-          {isRoleMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Alternar Perfil RBAC (Simulação de Acesso)
+            {isUnitMenuOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Unidades de Atendimento
+                </div>
+                {units.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      setSelectedUnitId(u.id);
+                      setIsUnitMenuOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors ${
+                      selectedUnitId === u.id ? 'bg-slate-100 font-bold text-slate-900' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <div className="flex-1 truncate">
+                      <div>{u.name}</div>
+                      {u.isPrimary && <div className="text-[10px] text-slate-400">Unidade principal</div>}
+                    </div>
+                    {selectedUnitId === u.id && <div className="w-1.5 h-1.5 rounded-full bg-sky-600 shrink-0" />}
+                  </button>
+                ))}
               </div>
-              {roles.map((r) => (
-                <button
-                  key={r.role}
-                  onClick={() => {
-                    switchRole(r.role);
-                    setIsRoleMenuOpen(false);
-                  }}
-                  className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors ${
-                    user?.role === r.role ? 'bg-slate-100 font-bold text-slate-900' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <r.icon className="w-4 h-4 shrink-0 text-slate-500" />
-                  <div className="flex-1 truncate">
-                    <div>{r.label}</div>
-                  </div>
-                  {user?.role === r.role && <div className="w-1.5 h-1.5 rounded-full bg-sky-600" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* User Avatar & Info */}
-        <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-          <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-            {user?.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('') : 'DR'}
+            )}
           </div>
-          <div className="hidden xl:block text-left">
+        )}
+
+        {/* User Avatar & Info — clicar no avatar abre a página de Perfil */}
+        <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+          <button
+            onClick={onOpenProfileModal}
+            className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shadow-xs hover:ring-2 hover:ring-sky-300 transition-all"
+            title="Ver meu perfil"
+          >
+            {user?.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('') : 'DR'}
+          </button>
+          <button onClick={onOpenProfileModal} className="hidden xl:block text-left hover:opacity-70 transition-opacity">
             <div className="text-xs font-semibold text-slate-800 leading-tight truncate max-w-[140px]">{user?.name}</div>
             <div className="text-[10px] text-slate-500 uppercase tracking-wider">{user?.role}</div>
-          </div>
+          </button>
           <button
-            onClick={() => {
-              logout();
-              if (onNavigateToLandingPage) {
-                onNavigateToLandingPage();
-              }
-            }}
-            title="Sair do Sistema e Voltar à Landing Page"
+            onClick={() => logout()}
+            title="Sair do Sistema"
             className="ml-1 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />

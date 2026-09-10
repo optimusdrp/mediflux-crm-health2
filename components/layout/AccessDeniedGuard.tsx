@@ -32,7 +32,7 @@ interface AccessDeniedGuardProps {
 }
 
 export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
-  const { user, clinic, subscription, isTrialExpired, switchRole, logout, refreshSubscription } = useAuth();
+  const { user, clinic, subscription, isTrialExpired, logout, refreshSubscription } = useAuth();
   const { success, error: toastError, info } = useToast();
 
   const [selectedPlan, setSelectedPlan] = useState<'essencial' | 'profissional' | 'enterprise'>('enterprise');
@@ -351,14 +351,10 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
           <div>• Acesso registrado e auditado na trilha de não-repúdio do sistema.</div>
         </div>
 
-        <button
-          onClick={() => switchRole('admin')}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
-        >
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          Alternar para Perfil Administrador
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold">
+          <ShieldCheck className="w-4 h-4 text-slate-400" />
+          Solicite acesso a um Administrador da clínica
+        </div>
       </div>
     </div>
   );

@@ -23,6 +23,7 @@ import {
   Role,
   Funnel,
   FunnelStage,
+  Unit,
 } from '../types';
 
 export const apiService = {
@@ -305,10 +306,57 @@ export const apiService = {
    * original esses dados existiam só como estado local (identityData),
    * nunca eram de fato salvos, mesmo clicando em "Salvar".
    */
+  // 0.5 Perfil do Usuário — rotas novas. Antes, o avatar circular no
+  // cabeçalho (iniciais do nome) não tinha nenhuma ação ao clicar.
+  async getProfile() {
+    return authFetch<{ user: User }>('/api/profile');
+  },
+
+  async updateProfile(payload: { name?: string; crm?: string; specialty?: string }) {
+    return authFetch<{ user: User }>('/api/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    return authFetch<{ success: boolean; message: string }>('/api/profile/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+
   async saveClinicIdentity(payload: Partial<Clinic>) {
     return authFetch<{ clinic: Clinic }>('/api/clinic', {
       method: 'PUT',
       body: JSON.stringify(payload),
+    });
+  },
+
+  // 11.4 Gestão de Unidades de Atendimento — rotas novas. Toda clínica
+  // tem 1 unidade incluída no plano; unidades extras são contratadas
+  // à parte (ver campo limit.extraUnitPriceBRL retornado por getUnits).
+  async getUnits() {
+    return authFetch<{ units: Unit[]; limit: { max: number; used: number; extraUnitPriceBRL: number } }>('/api/units');
+  },
+
+  async createUnit(payload: { name: string; address?: string; phone?: string; horarioFuncionamento?: string }) {
+    return authFetch<{ unit: Unit }>('/api/units', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateUnit(id: string, payload: { name?: string; address?: string; phone?: string; horarioFuncionamento?: string }) {
+    return authFetch<{ unit: Unit }>('/api/units', {
+      method: 'PUT',
+      body: JSON.stringify({ id, ...payload }),
+    });
+  },
+
+  async deleteUnit(id: string) {
+    return authFetch<{ success: boolean }>(`/api/units?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   },
 

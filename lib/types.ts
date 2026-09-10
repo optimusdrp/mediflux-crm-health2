@@ -15,11 +15,13 @@ export type TabId =
 export type SensitiveAction = 
   | 'excluir_paciente'
   | 'unificar_duplicados'
+  | 'visualizar_duplicados'
   | 'exportar_dados_lgpd'
   | 'alterar_permissoes'
   | 'configurar_integracoes_pep'
   | 'gerenciar_cobranca'
   | 'disparar_webhooks_teste'
+  | 'gerenciar_unidades'
   | 'visualizar_prontuario_sensivel';
 
 export type UrgencyLevel = 'critica' | 'alta' | 'media' | 'baixa';
@@ -52,6 +54,23 @@ export interface Clinic {
   emailContato?: string;
   fusoHorario?: string;
   horarioFuncionamento?: string;
+}
+
+/**
+ * Unidade de atendimento — endereço físico distinto da clínica.
+ * Toda clínica tem 1 unidade incluída no plano (isPrimary: true,
+ * nunca excluível); unidades extras são contratadas à parte, com
+ * valor mensal adicional.
+ */
+export interface Unit {
+  id: string;
+  clinicId: string;
+  name: string;
+  address: string;
+  phone: string;
+  horarioFuncionamento?: string;
+  isPrimary: boolean;
+  createdAt: string;
 }
 
 export interface TrialInfo {

@@ -11,6 +11,7 @@ import {
   QuickResponse,
   Funnel,
   FunnelStage,
+  Unit,
   Role,
   TabId,
   SensitiveAction,
@@ -37,9 +38,11 @@ import {
   Lock,
   Plus,
   Trash2,
+  Edit3,
   X,
   Send,
   AlertTriangle,
+  MapPin,
   Search,
   Check,
   Smartphone,
@@ -178,7 +181,12 @@ const ALL_ACTIONS: { id: SensitiveAction; label: string; danger?: boolean }[] = 
   { id: 'disparar_webhooks_teste', label: 'Disparar Testes de Webhook' },
 ];
 
-export function ConfiguracoesView() {
+interface ConfiguracoesViewProps {
+  /** Abre o modal de upgrade de plano — usado pela seção de Gestão de Unidades quando o limite contratado é atingido. */
+  onOpenUpgradeModal?: () => void;
+}
+
+export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps = {}) {
   const { user, subscription, clinic, updateClinic } = useAuth();
   const { success, error, warning } = useToast();
 
@@ -369,6 +377,99 @@ export function ConfiguracoesView() {
         error('Falha ao excluir etapa', apiError.message || 'Erro ao excluir');
         setPendingDeletion(null);
       }
+    }
+  };
+
+  // --- Gestão de Unidades de Atendimento: estado de UI e handlers ---
+  // Toda clínica tem 1 unidade incluída no plano (isPrimary, nunca
+  // excluível); unidades extras são contratadas à parte, com valor
+  // mensal adicional — ver limit.extraUnitPriceBRL retornado por
+  // getUnits() e o bloqueio 402 em createUnit() quando o limite é
+  // atingido.
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [unitLimit, setUnitLimit] = useState<{ max: number; used: number; extraUnitPriceBRL: number } | null>(null);
+  const [isLoadingUnits, setIsLoadingUnits] = useState(true);
+  const [newUnitForm, setNewUnitForm] = useState({ name: '', address: '', phone: '', horarioFuncionamento: '' });
+  const [isCreatingUnit, setIsCreatingUnit] = useState(false);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [editUnitForm, setEditUnitForm] = useState({ name: '', address: '', phone: '', horarioFuncionamento: '' });
+  const [pendingUnitDeleteId, setPendingUnitDeleteId] = useState<string | null>(null);
+  const [showUpsellNotice, setShowUpsellNotice] = useState(false);
+
+  const fetchUnits = async () => {
+    setIsLoadingUnits(true);
+    try {
+      const res = await apiService.getUnits();
+      setUnits(res.units || []);
+      setUnitLimit(res.limit || null);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao carregar unidades';
+      error('Falha ao carregar unidades', msg);
+    } finally {
+      setIsLoadingUnits(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnits();
+  }, []);
+
+  const handleCreateUnit = async () => {
+    if (!newUnitForm.name.trim()) return;
+    setIsCreatingUnit(true);
+    setShowUpsellNotice(false);
+    try {
+      const res = await apiService.createUnit(newUnitForm);
+      setUnits((prev) => [...prev, res.unit]);
+      setUnitLimit((prev) => (prev ? { ...prev, used: prev.used + 1 } : prev));
+      setNewUnitForm({ name: '', address: '', phone: '', horarioFuncionamento: '' });
+      success('Unidade criada', `"${res.unit.name}" foi adicionada.`);
+    } catch (err: unknown) {
+      const apiError = err as { message?: string; limitReached?: boolean };
+      if (apiError.limitReached) {
+        setShowUpsellNotice(true);
+      } else {
+        error('Falha ao criar unidade', apiError.message || 'Erro ao criar unidade');
+      }
+    } finally {
+      setIsCreatingUnit(false);
+    }
+  };
+
+  const startEditingUnit = (unit: Unit) => {
+    setEditingUnitId(unit.id);
+    setEditUnitForm({
+      name: unit.name,
+      address: unit.address || '',
+      phone: unit.phone || '',
+      horarioFuncionamento: unit.horarioFuncionamento || '',
+    });
+  };
+
+  const handleSaveUnitEdit = async () => {
+    if (!editingUnitId || !editUnitForm.name.trim()) return;
+    try {
+      const res = await apiService.updateUnit(editingUnitId, editUnitForm);
+      setUnits((prev) => prev.map((u) => (u.id === editingUnitId ? res.unit : u)));
+      setEditingUnitId(null);
+      success('Unidade atualizada', 'As alterações foram salvas.');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao atualizar unidade';
+      error('Falha ao atualizar unidade', msg);
+    }
+  };
+
+  const handleDeleteUnit = async (id: string) => {
+    try {
+      await apiService.deleteUnit(id);
+      setUnits((prev) => prev.filter((u) => u.id !== id));
+      setUnitLimit((prev) => (prev ? { ...prev, used: prev.used - 1 } : prev));
+      setPendingUnitDeleteId(null);
+      success('Unidade excluída', 'A unidade foi removida.');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao excluir unidade';
+      error('Falha ao excluir unidade', msg);
+      setPendingUnitDeleteId(null);
     }
   };
 
@@ -931,6 +1032,204 @@ export function ConfiguracoesView() {
                   />
                 </div>
               </div>
+
+              {/* ===================================================================== */}
+              {/* GESTÃO DE UNIDADES DE ATENDIMENTO */}
+              {/* ===================================================================== */}
+              <div className="pt-4 border-t border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-sky-600" /> Unidades de Atendimento
+                    </h4>
+                    <p className="text-slate-500">
+                      Sua clínica pode atender em mais de um endereço. A primeira unidade está incluída no plano
+                      {unitLimit && unitLimit.extraUnitPriceBRL ? (
+                        <> — unidades adicionais custam <strong className="text-slate-700">R$ {unitLimit.extraUnitPriceBRL}/mês</strong> cada.</>
+                      ) : (
+                        '.'
+                      )}
+                    </p>
+                  </div>
+                  {unitLimit && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 shrink-0">
+                      {unitLimit.used} de {unitLimit.max} unidade{unitLimit.max !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingUnits ? (
+                  <div className="text-center py-6 text-slate-400">Carregando unidades...</div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {units.map((unit) => (
+                      <div key={unit.id} className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200">
+                        {editingUnitId === unit.id ? (
+                          <div className="space-y-2.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block font-semibold text-slate-600 mb-1">Nome da unidade</label>
+                                <input
+                                  type="text"
+                                  value={editUnitForm.name}
+                                  onChange={(e) => setEditUnitForm({ ...editUnitForm, name: e.target.value })}
+                                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                                />
+                              </div>
+                              <div>
+                                <label className="block font-semibold text-slate-600 mb-1">Telefone</label>
+                                <input
+                                  type="text"
+                                  value={editUnitForm.phone}
+                                  onChange={(e) => setEditUnitForm({ ...editUnitForm, phone: e.target.value })}
+                                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono"
+                                />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className="block font-semibold text-slate-600 mb-1">Endereço</label>
+                                <input
+                                  type="text"
+                                  value={editUnitForm.address}
+                                  onChange={(e) => setEditUnitForm({ ...editUnitForm, address: e.target.value })}
+                                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                                />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className="block font-semibold text-slate-600 mb-1">Horário de funcionamento</label>
+                                <input
+                                  type="text"
+                                  value={editUnitForm.horarioFuncionamento}
+                                  onChange={(e) => setEditUnitForm({ ...editUnitForm, horarioFuncionamento: e.target.value })}
+                                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => setEditingUnitId(null)}
+                                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-200 font-semibold"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={handleSaveUnitEdit}
+                                disabled={!editUnitForm.name.trim()}
+                                className="px-3 py-1.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700 font-semibold disabled:opacity-40"
+                              >
+                                Salvar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900">{unit.name}</span>
+                                {unit.isPrimary && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 shrink-0">
+                                    Unidade Principal
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-slate-500 mt-0.5 truncate">
+                                {unit.address || 'Endereço não informado'}
+                                {unit.phone ? ` • ${unit.phone}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => startEditingUnit(unit)}
+                                className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-white rounded-lg transition-colors"
+                                title="Editar unidade"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              {!unit.isPrimary && (
+                                <button
+                                  onClick={() => setPendingUnitDeleteId(unit.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-colors"
+                                  title="Excluir unidade"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Formulário de nova unidade, ou aviso de upsell se o limite foi atingido */}
+                {showUpsellNotice ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <AlertTriangle className="w-4 h-4" /> Limite de unidades do plano atingido
+                    </div>
+                    <p className="text-amber-800">
+                      Sua clínica já usa todas as {unitLimit?.max} unidade{unitLimit?.max !== 1 ? 's' : ''} incluída{unitLimit?.max !== 1 ? 's' : ''} no plano.
+                      Contrate uma unidade adicional por <strong>R$ {unitLimit?.extraUnitPriceBRL}/mês</strong> para cadastrar mais endereços de atendimento.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => setShowUpsellNotice(false)}
+                        className="px-3 py-1.5 rounded-lg text-amber-800 hover:bg-amber-100 font-semibold"
+                      >
+                        Fechar
+                      </button>
+                      <button
+                        onClick={() => onOpenUpgradeModal?.()}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 font-semibold"
+                      >
+                        Contratar unidade adicional
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-sky-50/60 rounded-xl border border-sky-200/60 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Nome da nova unidade</label>
+                        <input
+                          type="text"
+                          placeholder="Ex.: Filial Centro"
+                          value={newUnitForm.name}
+                          onChange={(e) => setNewUnitForm({ ...newUnitForm, name: e.target.value })}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-600 mb-1">Telefone</label>
+                        <input
+                          type="text"
+                          placeholder="(00) 00000-0000"
+                          value={newUnitForm.phone}
+                          onChange={(e) => setNewUnitForm({ ...newUnitForm, phone: e.target.value })}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block font-semibold text-slate-600 mb-1">Endereço</label>
+                        <input
+                          type="text"
+                          value={newUnitForm.address}
+                          onChange={(e) => setNewUnitForm({ ...newUnitForm, address: e.target.value })}
+                          className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCreateUnit}
+                      disabled={!newUnitForm.name.trim() || isCreatingUnit}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {isCreatingUnit ? 'Adicionando...' : 'Adicionar Unidade'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1111,6 +1410,32 @@ export function ConfiguracoesView() {
                         className="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold"
                       >
                         {funnelActionError ? 'Excluir e remanejar' : 'Excluir'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmação de exclusão de unidade */}
+              {pendingUnitDeleteId && (
+                <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      Excluir a unidade "{units.find((u) => u.id === pendingUnitDeleteId)?.name}"?
+                    </h4>
+                    <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        onClick={() => setPendingUnitDeleteId(null)}
+                        className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUnit(pendingUnitDeleteId)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold"
+                      >
+                        Excluir
                       </button>
                     </div>
                   </div>
