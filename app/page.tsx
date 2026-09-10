@@ -33,6 +33,11 @@ import { UpgradeModal } from '@/components/modals/UpgradeModal';
 function MediFluxAppContent() {
   const { user, subscription, isTrialExpired, hasPermission, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('visao_geral');
+  // Correção de responsividade: controla se o Sidebar (menu lateral)
+  // está aberto em telas pequenas, onde ele fica recolhido por
+  // padrão. Em telas grandes (lg: e acima) isso é ignorado — o
+  // Sidebar permanece sempre visível.
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
 
   // Modals state
@@ -108,6 +113,7 @@ function MediFluxAppContent() {
         duplicatesCount={duplicates.length}
         onNavigateToLandingPage={() => setActiveTab('landing_page')}
         onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
       />
 
       {/* Trial Expiration Notification Banner (Warns when < 2 days) */}
@@ -123,6 +129,8 @@ function MediFluxAppContent() {
           }}
           pendingCount={2}
           unreadMessagesCount={1}
+          isOpenOnMobile={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* Dynamic View Container */}

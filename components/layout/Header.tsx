@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Globe,
   LogOut,
+  Menu,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -26,6 +27,16 @@ interface HeaderProps {
   duplicatesCount?: number;
   onNavigateToLandingPage?: () => void;
   onOpenUpgradeModal?: () => void;
+  /**
+   * Abre/fecha o menu lateral em telas pequenas (mobile/tablet
+   * retrato) — correção de responsividade: o Sidebar antes era
+   * sempre visível e fixo em 256px, o que em telas estreitas
+   * empurrava o conteúdo inteiro para fora da área visível (ver
+   * relato real do usuário, print do app em modo mobile). Em telas
+   * grandes (lg: e acima) este botão não aparece — o Sidebar
+   * continua sempre visível como antes.
+   */
+  onToggleSidebar?: () => void;
 }
 
 export function Header({
@@ -33,6 +44,7 @@ export function Header({
   duplicatesCount = 0,
   onNavigateToLandingPage,
   onOpenUpgradeModal,
+  onToggleSidebar,
 }: HeaderProps) {
   const { user, clinic, subscription, switchRole, logout } = useAuth();
   const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
@@ -48,10 +60,21 @@ export function Header({
   const currentRoleConfig = roles.find((r) => r.role === user?.role) || roles[0];
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center justify-between shadow-xs">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between shadow-xs gap-2">
+      {/* Botão de menu (hambúrguer) — só em telas menores que lg, onde o Sidebar fica recolhido por padrão */}
+      {onToggleSidebar && (
+        <button
+          onClick={onToggleSidebar}
+          className="lg:hidden shrink-0 p-2 -ml-1 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Abrir menu de navegação"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Brand & Clinic Info */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 flex items-center justify-center text-white shadow-sm shadow-sky-500/20">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 flex items-center justify-center text-white shadow-sm shadow-sky-500/20 shrink-0">
           <HeartPulse className="w-6 h-6" />
         </div>
         <div>
