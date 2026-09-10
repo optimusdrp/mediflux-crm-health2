@@ -10,8 +10,6 @@ import {
   Users,
   Calendar,
   AlertTriangle,
-  HeartPulse,
-  TrendingUp,
   Clock,
   CheckCircle2,
   ArrowUpRight,
@@ -83,26 +81,17 @@ export function VisaoGeralView({
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Top Banner / Headline */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-sm">
+      {/* Header simples — sem o card decorativo removido a pedido do usuário */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sky-400 text-xs font-semibold uppercase tracking-wider mb-1">
-            <HeartPulse className="w-4 h-4" />
-            <span>Painel de Controle Clínico em Tempo Real</span>
-          </div>
-          <h2 className="text-xl font-bold text-white">
-            {clinic?.name || 'Clínica CardioVida & Saúde Integrada'}
-          </h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Monitoramento operacional, triagem com Protocolo Manchester e gestão segura de atendimentos com conformidade LGPD.
-          </p>
+          <h2 className="text-lg font-bold text-slate-900">{clinic?.name || 'Minha Clínica'}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Visão geral dos atendimentos e indicadores da clínica.</p>
         </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => loadData(true)}
             disabled={isRefreshing}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+            className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
             title="Atualizar Dados"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -116,7 +105,7 @@ export function VisaoGeralView({
           </button>
           <button
             onClick={() => onNavigateTab('atendimentos')}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition-colors"
+            className="hidden md:inline-flex px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-colors"
           >
             Abrir Chat Omnichannel
           </button>
@@ -135,9 +124,13 @@ export function VisaoGeralView({
           </div>
           <div className="mt-3">
             <span className="text-2xl font-extrabold text-slate-900">{totalPatients}</span>
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium mt-1">
-              <TrendingUp className="w-3.5 h-3.5" /> +12% vs mês anterior
-            </div>
+            {/* Removida a alegação "+12% vs mês anterior" que existia
+                aqui antes: era texto fixo, sempre igual, sem nenhum
+                cálculo real por trás — e o backend hoje não guarda a
+                data de cadastro do paciente, então essa comparação
+                não pode ser calculada de verdade ainda. Reintroduzir
+                isso exige adicionar createdAt a Patient e aguardar
+                pelo menos 2 meses de dados reais acumulados. */}
           </div>
         </div>
 
