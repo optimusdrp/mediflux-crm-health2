@@ -9,10 +9,8 @@ import {
   ShieldCheck,
   Users,
   Building2,
-  ChevronDown,
   Menu,
   LogOut,
-  MapPin,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -38,11 +36,15 @@ interface HeaderProps {
  *     no código (mesmo backdoor já identificado e removido do texto
  *     de login numa auditoria anterior, aqui ainda funcional). Removido
  *     por completo, não só escondido.
- *  3. No lugar dele: seletor de Unidades de Atendimento cadastradas
- *     (Configurações → Identidade & Unidades → Gestão de Unidades).
- *  4. Nome da unidade selecionada, ao lado do nome da clínica.
- *  5. Avatar do usuário agora abre a página de Perfil (onOpenProfileModal).
- *  6. Botão de duplicados só aparece para quem tem a permissão
+ *  3. Nome da unidade principal, ao lado do nome da clínica (lado
+ *     esquerdo). O seletor de unidades no lado direito (dropdown)
+ *     foi removido depois: em telas estreitas (~320px) ele sobrepunha
+ *     o badge "HEALTH CRM" e cortava o nome "MediFlux" — ver relato
+ *     real do usuário com prints do DevTools em modo responsivo. A
+ *     gestão/troca de unidade continua disponível em Configurações →
+ *     Identidade & Unidades.
+ *  4. Avatar do usuário agora abre a página de Perfil (onOpenProfileModal).
+ *  5. Botão de duplicados só aparece para quem tem a permissão
  *     'visualizar_duplicados' (admin sempre tem, por padrão).
  */
 export function Header({
@@ -55,7 +57,6 @@ export function Header({
   const { user, clinic, subscription, logout, hasActionPermission } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
-  const [isUnitMenuOpen, setIsUnitMenuOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -191,48 +192,6 @@ export function Header({
             </>
           )}
         </div>
-
-        {/* Unit Selector — substitui o antigo Alternador de Perfil RBAC */}
-        {units.length > 0 && (
-          <div className="relative">
-            <button
-              onClick={() => setIsUnitMenuOpen(!isUnitMenuOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs font-medium transition-all shadow-xs hover:bg-slate-100"
-              id="unit-selector-button"
-            >
-              <MapPin className="w-4 h-4 text-sky-600" />
-              <span className="font-semibold hidden sm:inline max-w-[120px] truncate">{selectedUnit?.name || 'Unidade'}</span>
-              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-            </button>
-
-            {isUnitMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1.5 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Unidades de Atendimento
-                </div>
-                {units.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      setSelectedUnitId(u.id);
-                      setIsUnitMenuOpen(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 transition-colors ${
-                      selectedUnitId === u.id ? 'bg-slate-100 font-bold text-slate-900' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                    <div className="flex-1 truncate">
-                      <div>{u.name}</div>
-                      {u.isPrimary && <div className="text-[10px] text-slate-400">Unidade principal</div>}
-                    </div>
-                    {selectedUnitId === u.id && <div className="w-1.5 h-1.5 rounded-full bg-sky-600 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* User Avatar & Info — clicar no avatar abre a página de Perfil */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
