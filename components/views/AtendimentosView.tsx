@@ -10,6 +10,7 @@ import {
   Search,
   Filter,
   Send,
+  ChevronLeft,
   Sparkles,
   Lock,
   Edit3,
@@ -59,6 +60,16 @@ export function AtendimentosView({
   // por um modal customizado no mesmo padrão visual usado em outras
   // confirmações de exclusão do MediFlux.
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  // Correção de UX mobile: os 3 painéis desta tela (lista, conversa,
+  // ficha clínica) sempre estiveram todos montados ao mesmo tempo,
+  // um embaixo do outro em telas pequenas, competindo pela mesma
+  // altura fixa de tela sem conseguir rolar — resultado ilegível (ver
+  // relato real do usuário). Em telas menores que lg, mostramos só
+  // UM painel por vez (padrão mestre-detalhe, como WhatsApp/Telegram
+  // mobile), navegando entre eles com um botão "voltar". Em telas
+  // grandes (lg: e acima), esse estado é ignorado — os 3 painéis
+  // continuam lado a lado, exatamente como sempre estiveram.
+  const [mobilePanel, setMobilePanel] = useState<'lista' | 'conversa' | 'detalhes'>('lista');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
@@ -338,6 +349,7 @@ export function AtendimentosView({
       success('Paciente Removido', 'Registro excluído em conformidade com a LGPD.');
       setPatients((prev) => prev.filter((p) => p.id !== selectedPatient.id));
       setSelectedPatientId('');
+      setMobilePanel('lista');
       setIsDeleteConfirmOpen(false);
     } catch (err: any) {
       error('Permissão Insuficiente', err.message || 'Apenas administradores podem excluir pacientes.');
@@ -355,7 +367,7 @@ export function AtendimentosView({
   return (
     <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-61px)] overflow-hidden bg-slate-100">
       {/* COLUMN 1: Queue / Patient List (340px) */}
-      <div className="w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
+      <div className={`w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex-col h-full ${mobilePanel === 'lista' ? 'flex' : 'hidden lg:flex'}`}>
         {/* Search & Header */}
         <div className="p-3 border-b border-slate-200 space-y-2">
           <div className="flex items-center justify-between">
@@ -434,7 +446,10 @@ export function AtendimentosView({
               return (
                 <div
                   key={p.id}
-                  onClick={() => setSelectedPatientId(p.id)}
+                  onClick={() => {
+                    setSelectedPatientId(p.id);
+                    setMobilePanel('conversa');
+                  }}
                   className={`p-3 cursor-pointer transition-all ${uStyle.border} ${
                     isSelected ? 'bg-sky-50/80 border-r-2 border-r-sky-600' : 'hover:bg-slate-50 bg-white'
                   }`}
@@ -473,12 +488,20 @@ export function AtendimentosView({
       </div>
 
       {/* COLUMN 2: Chat Stream & Omnichannel Messenger */}
-      <div className="flex-1 flex flex-col h-full bg-slate-50 border-r border-slate-200">
+      <div className={`flex-1 flex-col h-full bg-slate-50 border-r border-slate-200 ${mobilePanel === 'conversa' ? 'flex' : 'hidden lg:flex'}`}>
         {selectedPatient ? (
           <>
             {/* Chat Top Bar */}
             <div className="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-3">
+                {/* Botão voltar — só em mobile, volta para a lista de pacientes */}
+                <button
+                  onClick={() => setMobilePanel('lista')}
+                  className="lg:hidden -ml-1 p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                  aria-label="Voltar para a lista"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
                 <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
                   {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                 </div>
@@ -509,7 +532,15 @@ export function AtendimentosView({
                   id="btn-run-ai-triage"
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${isAnalyzingAI ? 'animate-spin' : ''}`} />
-                  {isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}
+                  <span className="hidden sm:inline">{isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}</span>
+                </button>
+                {/* Acesso à ficha clínica — só em mobile (em desktop a coluna 3 já fica visível ao lado) */}
+                <button
+                  onClick={() => setMobilePanel('detalhes')}
+                  className="lg:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                  aria-label="Ver ficha do paciente"
+                >
+                  <User className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -670,9 +701,17 @@ export function AtendimentosView({
       </div>
 
       {/* COLUMN 3: Clinical Card & AI Insights (340px) */}
-      <div className="w-full lg:w-80 shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto p-4 space-y-4">
+      <div className={`w-full lg:w-80 shrink-0 bg-white border-l border-slate-200 flex-col h-full overflow-y-auto p-4 space-y-4 ${mobilePanel === 'detalhes' ? 'flex' : 'hidden lg:flex'}`}>
         {selectedPatient ? (
           <>
+            {/* Botão voltar — só em mobile, volta para a conversa */}
+            <button
+              onClick={() => setMobilePanel('conversa')}
+              className="lg:hidden -ml-1 -mt-1 flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Voltar para a conversa
+            </button>
+
             {/* Patient Header Card */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between mb-2">
