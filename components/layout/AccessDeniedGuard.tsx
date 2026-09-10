@@ -59,15 +59,15 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
     Boolean(trialInfo?.isExpired) ||
     (subscription?.billingStatus === 'em_trial' && trialInfo && !trialInfo.isValid);
 
-  // Handler to reactivate/restore 7 days trial on Firestore for testing/reviewer
+  // Handler to reactivate/restore 7 days trial for testing/reviewer
   const handleRestoreTrial = async () => {
     setIsRestoringTrial(true);
     try {
       const res = await apiService.simulateTrial('active_7_days', user?.email);
       await refreshSubscription();
-      success('Período de Testes Restaurado', res.message || '7 dias liberados no Firestore para demonstração.');
+      success('Período de Testes Restaurado', res.message || '7 dias liberados para demonstração.');
     } catch (err: any) {
-      toastError('Erro ao Restaurar', err.message || 'Falha ao atualizar Firestore.');
+      toastError('Erro ao Restaurar', err.message || 'Falha ao redefinir o período de testes.');
     } finally {
       setIsRestoringTrial(false);
     }
@@ -118,7 +118,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mx-auto mt-2 leading-relaxed">
               O período de testes de 7 dias do <strong>MediFlux CRM Health</strong> para o módulo{' '}
               <span className="text-rose-400 font-semibold">{tabNames[tab] || tab}</span> expirou. Todos os prontuários,
-              pacientes cadastrados e regras de IA continuam <strong className="text-teal-400">100% salvos e protegidos no Firestore</strong>.
+              pacientes cadastrados e regras de IA continuam <strong className="text-teal-400">100% salvos e protegidos</strong>.
             </p>
           </div>
 
@@ -141,7 +141,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
               </span>
             </div>
             <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-              <span className="text-[10px] text-slate-400 block font-medium">Status no Firestore</span>
+              <span className="text-[10px] text-slate-400 block font-medium">Status do Período de Teste</span>
               <span className="font-bold text-rose-400 inline-flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                 Bloqueado (403)
@@ -186,7 +186,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
                   </li>
                   <li className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Prontuário Cloud Firestore</span>
+                    <span>Prontuário Eletrônico Seguro</span>
                   </li>
                   <li className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -289,7 +289,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
                 disabled={isRestoringTrial}
                 onClick={handleRestoreTrial}
                 className="flex-1 sm:flex-none px-3.5 py-2.5 text-xs font-semibold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                title="Para avaliação e testes: redefine a data no Firestore para mais 7 dias"
+                title="Para avaliação e testes: redefine para mais 7 dias"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRestoringTrial ? 'animate-spin' : ''}`} />
                 <span>Restaurar 7 Dias (Simulação)</span>

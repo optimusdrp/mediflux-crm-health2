@@ -42,6 +42,13 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
           if (rRes.status === 'fulfilled' && rRes.value?.rules?.length) {
             setRules(rRes.value.rules);
           }
+          // Correção de UX: Promise.allSettled nunca lança para o catch
+          // externo quando uma das chamadas falha — antes isso ficava
+          // completamente silencioso (a tela só mostrava "sem
+          // pendências", indistinguível de uma falha real de rede).
+          if (pRes.status === 'rejected' || rRes.status === 'rejected') {
+            error('Falha ao carregar pendências', 'Alguns dados podem estar desatualizados. Recarregue a página.');
+          }
         }
       } catch {
         // Fallback silencioso

@@ -25,17 +25,39 @@ export function AuditoriaLGPDView() {
   const [category, setCategory] = useState<string>('todos');
   const [search, setSearch] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  // Distingue "não há registros" de "falha ao carregar" — antes os
+  // dois casos mostravam exatamente a mesma tela vazia, sem o usuário
+  // conseguir saber se a auditoria realmente não tem nada ou se a
+  // consulta falhou (rede, sessão expirada, erro no servidor). Dado
+  // que esta tela lida com trilha de auditoria LGPD, essa distinção
+  // importa mais aqui do que em telas operacionais comuns.
+  const [hasLoadError, setHasLoadError] = useState(false);
+
+  const fetchLogs = async () => {
+    setIsLoading(true);
+    setHasLoadError(false);
+    try {
+      const res = await apiService.getAuditLogs({ category, search });
+      setLogs(res.logs || []);
+    } catch {
+      setHasLoadError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
-    const fetchLogs = async () => {
+    const load = async () => {
+      setIsLoading(true);
+      setHasLoadError(false);
       try {
         const res = await apiService.getAuditLogs({ category, search });
         if (isMounted) {
           setLogs(res.logs || []);
         }
       } catch {
-        // Fallback silencioso sem travar visualização
+        if (isMounted) setHasLoadError(true);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -43,7 +65,7 @@ export function AuditoriaLGPDView() {
       }
     };
 
-    fetchLogs();
+    load();
     return () => {
       isMounted = false;
     };
@@ -135,8 +157,22 @@ export function AuditoriaLGPDView() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
-                    Nenhum registro de auditoria encontrado com os filtros informados.
+                  <td colSpan={6} className="p-8 text-center">
+                    {hasLoadError ? (
+                      <div className="flex flex-col items-center gap-2 text-rose-600">
+                        <AlertCircle className="w-6 h-6" />
+                        <span className="font-semibold">Não foi possível carregar os registros de auditoria.</span>
+                        <span className="text-slate-500 text-[11px]">Verifique sua conexão e tente novamente.</span>
+                        <button
+                          onClick={fetchLogs}
+                          className="mt-1 px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors"
+                        >
+                          Tentar novamente
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">Nenhum registro de auditoria encontrado com os filtros informados.</span>
+                    )}
                   </td>
                 </tr>
               ) : (

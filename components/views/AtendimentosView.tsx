@@ -54,6 +54,11 @@ export function AtendimentosView({
 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  // Correção de UX: substitui o confirm() nativo do navegador (feio,
+  // inconsistente com o resto do sistema, e sem contexto adicional)
+  // por um modal customizado no mesmo padrão visual usado em outras
+  // confirmações de exclusão do MediFlux.
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
@@ -118,12 +123,16 @@ export function AtendimentosView({
             setSelectedPatientId(list[0].id);
           }
         }
-      } catch {
-        if (isMounted && patients.length === 0) {
-          setPatients(FALLBACK_PATIENTS);
-          if (!selectedPatientId && FALLBACK_PATIENTS.length > 0) {
-            setSelectedPatientId(FALLBACK_PATIENTS[0].id);
+      } catch (err: any) {
+        // Correção de UX: antes o erro era engolido em silêncio.
+        if (isMounted) {
+          if (patients.length === 0) {
+            setPatients(FALLBACK_PATIENTS);
+            if (!selectedPatientId && FALLBACK_PATIENTS.length > 0) {
+              setSelectedPatientId(FALLBACK_PATIENTS[0].id);
+            }
           }
+          error('Falha ao carregar atendimentos', err?.message || 'Não foi possível consultar os pacientes. Recarregue a página.');
         }
       } finally {
         if (isMounted) {
@@ -323,17 +332,16 @@ export function AtendimentosView({
   // Delete Patient (RBAC sensitive action)
   const handleDeletePatient = async () => {
     if (!selectedPatient) return;
-    if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${selectedPatient.name}?`)) {
-      return;
-    }
 
     try {
       await apiService.deletePatient(selectedPatient.id);
       success('Paciente Removido', 'Registro excluído em conformidade com a LGPD.');
       setPatients((prev) => prev.filter((p) => p.id !== selectedPatient.id));
       setSelectedPatientId('');
+      setIsDeleteConfirmOpen(false);
     } catch (err: any) {
       error('Permissão Insuficiente', err.message || 'Apenas administradores podem excluir pacientes.');
+      setIsDeleteConfirmOpen(false);
     }
   };
 
@@ -887,7 +895,7 @@ export function AtendimentosView({
             {/* Delete Patient (Sensitive Action) */}
             <div className="pt-2">
               <button
-                onClick={handleDeletePatient}
+                onClick={() => setIsDeleteConfirmOpen(true)}
                 className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Excluir Atendimento (LGPD)
@@ -896,6 +904,38 @@ export function AtendimentosView({
           </>
         ) : null}
       </div>
+
+      {/* Modal de confirmação de exclusão — substitui o confirm() nativo do navegador */}
+      {isDeleteConfirmOpen && selectedPatient && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-4.5 h-4.5" />
+              </div>
+              <h4 className="font-bold text-slate-900 text-sm">Excluir paciente permanentemente?</h4>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Tem certeza que deseja excluir o cadastro de <strong className="text-slate-700">{selectedPatient.name}</strong>?
+              Esta ação não pode ser desfeita e será registrada no log de auditoria LGPD.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeletePatient}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Excluir Definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

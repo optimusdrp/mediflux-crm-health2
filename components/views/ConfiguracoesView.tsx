@@ -18,7 +18,6 @@ import {
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { WhatsAppQRCodeViewer } from '@/components/WhatsAppQRCodeViewer';
 import { WhatsAppRealConnectionPanel } from '@/components/WhatsAppRealConnectionPanel';
 import { validateIdentityField, validateIdentityForm, maskCNPJ, maskTelefone, IdentityFieldKey } from '@/lib/validators/clinicIdentity';
 import {
@@ -1977,7 +1976,7 @@ export function ConfiguracoesView() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Plano, Validade da Licença & Faturamento</h3>
-                  <p className="text-slate-500">Transparência total de recursos contratados, controle do período de testes no Firestore e consumo mensal.</p>
+                  <p className="text-slate-500">Transparência total de recursos contratados, controle do período de testes e consumo mensal.</p>
                 </div>
               </div>
 
@@ -2014,7 +2013,7 @@ export function ConfiguracoesView() {
                               ? '⚠️ EXPIRA EM MENOS DE 2 DIAS'
                               : '✨ PERÍODO DE AVALIAÇÃO DE 7 DIAS'}
                           </span>
-                          <span className="text-slate-500 text-[11px]">Banco: Google Cloud Firestore</span>
+                          <span className="text-slate-500 text-[11px]">Infraestrutura: AWS</span>
                         </div>
                         <h4 className="font-bold text-sm text-slate-900 mt-1">
                           {subscription.trialInfo?.isExpiringSoon || (subscription.trialInfo?.daysRemaining ?? 7) <= 2
@@ -2023,7 +2022,7 @@ export function ConfiguracoesView() {
                         </h4>
                         <p className="text-[11px] text-slate-600 mt-0.5">
                           {subscription.trialInfo?.message ||
-                            'O MediFlux verifica a data de criação do usuário no Firestore para liberar o acesso durante os 7 dias.'}
+                            'O MediFlux verifica a data de criação da conta para liberar o acesso durante os 7 dias.'}
                         </p>
                       </div>
                     </div>

@@ -55,7 +55,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 </span>
               </div>
               <p className="text-xs text-teal-100 mt-0.5">
-                Mantenha todas as automações com IA, prontuários no Firestore e integração de WhatsApp ativas sem interrupções.
+                Mantenha todas as automações com IA, prontuários seguros e integração de WhatsApp ativas sem interrupções.
               </p>
             </div>
           </div>
@@ -94,7 +94,7 @@ export function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                  <span>Prontuário no Firestore</span>
+                  <span>Prontuário Eletrônico Seguro</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />

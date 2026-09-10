@@ -5,6 +5,7 @@ import { Subscription, UsageRecord, Patient } from '@/lib/types';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import {
   BarChart3,
   TrendingUp,
@@ -20,6 +21,7 @@ import {
 
 export function IndicadoresView() {
   const { clinic, subscription } = useAuth();
+  const { error } = useToast();
   const [patients, setPatients] = useState<Patient[]>(FALLBACK_PATIENTS);
   const [usageRecords, setUsageRecords] = useState<UsageRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +40,11 @@ export function IndicadoresView() {
           }
           if (sRes.status === 'fulfilled' && sRes.value?.usageRecords?.length) {
             setUsageRecords(sRes.value.usageRecords);
+          }
+          // Correção de UX: mesma lacuna de Promise.allSettled com
+          // status rejected sendo ignorado silenciosamente.
+          if (pRes.status === 'rejected' || sRes.status === 'rejected') {
+            error('Falha ao carregar indicadores', 'Alguns dados podem estar desatualizados. Recarregue a página.');
           }
         }
       } catch {

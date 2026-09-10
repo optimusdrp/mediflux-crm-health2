@@ -44,7 +44,7 @@ export function TrialExpirationBanner({ onOpenUpgradeModal }: TrialExpirationBan
       await refreshSubscription();
       success('Simulação de Trial Aplicada', res.message);
     } catch (err: any) {
-      toastError('Erro na Simulação', err.message || 'Falha ao atualizar Firestore.');
+      toastError('Erro na Simulação', err.message || 'Falha ao aplicar a simulação de trial.');
     } finally {
       setIsSimulating(false);
     }
@@ -103,7 +103,7 @@ export function TrialExpirationBanner({ onOpenUpgradeModal }: TrialExpirationBan
             <span className="hidden xl:inline text-slate-600">
               {isExpiringSoon
                 ? 'Faça o upgrade para manter suas automações de WhatsApp e prontuários ativos.'
-                : 'Acesso Enterprise liberado no Google Cloud Firestore.'}
+                : 'Acesso Enterprise liberado.'}
             </span>
           </div>
         </div>
@@ -119,13 +119,13 @@ export function TrialExpirationBanner({ onOpenUpgradeModal }: TrialExpirationBan
               title="Testar validação de expiração e prazos"
             >
               <FlaskConical className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Simular Firestore</span>
+              <span>Simular Trial</span>
             </button>
 
             {showSimPanel && (
               <div className="absolute right-0 top-full mt-1 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-3 z-50 text-white space-y-2 animate-in fade-in">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
-                  <span className="text-[11px] font-bold text-slate-200">Simulador de Validade Firestore</span>
+                  <span className="text-[11px] font-bold text-slate-200">Simulador de Validade do Trial</span>
                   <button
                     type="button"
                     onClick={() => setShowSimPanel(false)}
@@ -136,7 +136,7 @@ export function TrialExpirationBanner({ onOpenUpgradeModal }: TrialExpirationBan
                 </div>
 
                 <p className="text-[10px] text-slate-400">
-                  Altere a data no Firestore para validar as regras dos 7 dias e aviso de menos de 2 dias:
+                  Altere a data para validar as regras dos 7 dias e aviso de menos de 2 dias:
                 </p>
 
                 <div className="space-y-1.5 pt-1">

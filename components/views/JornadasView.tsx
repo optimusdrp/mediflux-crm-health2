@@ -49,9 +49,13 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
         if (isMounted) {
           setPatients(res.patients && res.patients.length > 0 ? res.patients : FALLBACK_PATIENTS);
         }
-      } catch {
-        if (isMounted && patients.length === 0) {
-          setPatients(FALLBACK_PATIENTS);
+      } catch (err: any) {
+        // Correção de UX: antes o erro era engolido em silêncio — a
+        // tela mostrava "nenhum paciente" mesmo quando a causa real
+        // era falha de rede/sessão, não ausência de dados.
+        if (isMounted) {
+          if (patients.length === 0) setPatients(FALLBACK_PATIENTS);
+          error('Falha ao carregar pacientes', err?.message || 'Não foi possível consultar os pacientes. Recarregue a página.');
         }
       } finally {
         if (isMounted) {

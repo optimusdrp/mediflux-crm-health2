@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Patient, Appointment, TabId } from '@/lib/types';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { FALLBACK_PATIENTS, FALLBACK_APPOINTMENTS } from '@/lib/data/fallbackSeed';
 import {
   Users,
@@ -32,6 +33,7 @@ export function VisaoGeralView({
   onOpenNewPatientModal,
 }: VisaoGeralViewProps) {
   const { clinic, subscription } = useAuth();
+  const { error } = useToast();
   const [patients, setPatients] = useState<Patient[]>(FALLBACK_PATIENTS);
   const [appointments, setAppointments] = useState<Appointment[]>(FALLBACK_APPOINTMENTS);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +52,13 @@ export function VisaoGeralView({
       }
       if (aRes.status === 'fulfilled' && aRes.value?.appointments?.length) {
         setAppointments(aRes.value.appointments);
+      }
+      // Correção de UX: Promise.allSettled não lança para o catch
+      // externo quando uma chamada individual falha — antes isso
+      // ficava silencioso, sem o usuário saber que o painel pode
+      // estar mostrando dados desatualizados/incompletos.
+      if (pRes.status === 'rejected' || aRes.status === 'rejected') {
+        error('Falha ao atualizar painel', 'Alguns indicadores podem estar desatualizados. Tente atualizar novamente.');
       }
     } catch {
       // Mantém fallback seguro sem quebrar o painel

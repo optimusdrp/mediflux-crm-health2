@@ -39,9 +39,9 @@ export function TrialExpiredModal({ isOpen }: TrialExpiredModalProps) {
     try {
       await apiService.simulateTrial('active_7_days', user?.email);
       await refreshSubscription();
-      success('Período Reativado', 'O período de 7 dias foi redefinido no Firestore para testes.');
+      success('Período Reativado', 'O período de 7 dias foi redefinido para testes.');
     } catch (err: any) {
-      error('Erro ao reativar', err.message || 'Falha na atualização do Firestore.');
+      error('Erro ao reativar', err.message || 'Falha ao redefinir o período de testes.');
     } finally {
       setIsResetting(false);
     }
@@ -66,7 +66,7 @@ export function TrialExpiredModal({ isOpen }: TrialExpiredModalProps) {
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto mt-1.5 leading-relaxed">
             Agradecemos por testar o <strong>MediFlux CRM Health</strong>. Seus dados clínicos, pacientes cadastrados e
-            regras de triagem continuam <strong className="text-teal-400">100% salvos e protegidos no Firestore</strong>.
+            regras de triagem continuam <strong className="text-teal-400">100% salvos e protegidos</strong>.
           </p>
         </div>
 
@@ -77,7 +77,7 @@ export function TrialExpiredModal({ isOpen }: TrialExpiredModalProps) {
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Data de Criação:</span>
               <span className="font-semibold text-slate-200">
-                {trialInfo?.registeredAt ? new Date(trialInfo.registeredAt).toLocaleDateString('pt-BR') : '2026-08-21'}
+                {trialInfo?.registeredAt ? new Date(trialInfo.registeredAt).toLocaleDateString('pt-BR') : '—'}
               </span>
             </div>
             <div>
@@ -87,7 +87,7 @@ export function TrialExpiredModal({ isOpen }: TrialExpiredModalProps) {
               </span>
             </div>
             <div className="col-span-2 sm:col-span-1">
-              <span className="text-[10px] text-slate-400 block font-medium">Status no Firestore:</span>
+              <span className="text-[10px] text-slate-400 block font-medium">Status do Período de Teste:</span>
               <span className="font-bold text-rose-400 inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                 Acesso Bloqueado
@@ -185,7 +185,7 @@ export function TrialExpiredModal({ isOpen }: TrialExpiredModalProps) {
               disabled={isResetting}
               onClick={handleReactivateTrial}
               className="flex-1 sm:flex-none px-3 py-2 text-xs font-semibold bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 rounded-xl transition-colors flex items-center justify-center gap-1.5"
-              title="Para testes: renova mais 7 dias no Firestore"
+              title="Para testes: renova mais 7 dias"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
               <span>Restaurar 7 Dias (Teste)</span>

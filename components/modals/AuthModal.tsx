@@ -278,11 +278,11 @@ export function AuthModal({
 
         {/* Scrollable Form Content */}
         <div className="p-6 overflow-y-auto space-y-5 text-left flex-1">
-          {/* Firestore Security Status Banner */}
+          {/* Security Status Banner */}
           <div className="p-2.5 rounded-xl bg-white border border-clinical-line flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-2 text-clinical-ink/60">
               <Database className="w-3.5 h-3.5 text-triage-blue" />
-              <span>Validação de Acesso: <strong className="text-clinical-ink">Google Cloud Firestore</strong></span>
+              <span>Validação de Acesso: <strong className="text-clinical-ink">Infraestrutura AWS</strong></span>
             </div>
             <span className="inline-flex items-center gap-1 text-[10px] text-triage-green bg-triage-green-soft border border-triage-green/20 px-2 py-0.5 rounded-full font-bold">
               <span className="w-1.5 h-1.5 rounded-full bg-triage-green animate-pulse-slow"></span>
@@ -544,9 +544,9 @@ export function AuthModal({
                   </div>
 
                   <div className="p-2 bg-white border border-clinical-line rounded-xl text-[10px] text-clinical-ink/50 flex items-center justify-between">
-                    <span>Senha de teste padrão: <strong className="text-clinical-ink">cardiovida2026</strong></span>
+                    <span>Ambiente de demonstração — use as credenciais fornecidas pela equipe.</span>
                     <span className="text-triage-blue font-semibold flex items-center gap-1">
-                      <Database className="w-3 h-3" /> Google Cloud Firestore
+                      <Database className="w-3 h-3" /> AWS
                     </span>
                   </div>
                 </div>

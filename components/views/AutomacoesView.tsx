@@ -36,8 +36,11 @@ export function AutomacoesView() {
         if (isMounted) {
           setAutomations(res.automations || []);
         }
-      } catch {
-        // Ignora silenciosamente para preservar regras locais
+      } catch (err: any) {
+        // Correção de UX: antes o erro era engolido em silêncio — o
+        // usuário via a lista vazia sem saber se a clínica realmente
+        // não tem automações ou se a consulta falhou.
+        if (isMounted) error('Falha ao carregar automações', err?.message || 'Não foi possível consultar as regras. Recarregue a página.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
