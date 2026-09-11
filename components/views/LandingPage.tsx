@@ -100,11 +100,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
     },
     {
       icon: Smartphone,
-      title: 'Omnichannel com WhatsApp Cloud API',
-      badge: 'Meta Oficial',
+      title: 'Omnichannel com WhatsApp',
+      badge: 'Conexão Real',
       accent: 'blue' as const,
       description:
-        'Conexão oficial da Meta BSP sem risco de bloqueio de número, central multi-atendente, mensagens estruturadas, templates aprovados e simulador integrado.',
+        'Conexão real com WhatsApp, central multi-atendente, mensagens estruturadas, respostas rápidas e simulador integrado.',
     },
     {
       icon: Database,
@@ -242,8 +242,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       a: 'Sim. Em conformidade rigorosa com o Art. 11 da LGPD, todos os dados clínicos trafegam criptografados em repouso e em trânsito. O sistema mantém uma trilha imutável de auditoria registrando quem acessou, editou ou exportou prontuários, com ferramentas nativas de anonimização e download de relatórios.',
     },
     {
-      q: 'A integração com o WhatsApp é oficial da Meta?',
-      a: 'Sim, utilizamos a WhatsApp Business Cloud API Oficial da Meta (BSP). Isso garante entrega instantânea, suporte a templates interativos aprovados, sem risco de banimento de chips ou dependência de aparelhos celulares ligados.',
+      q: 'Como funciona a integração com o WhatsApp?',
+      a: 'O MediFlux conecta ao número de WhatsApp real da sua clínica, com toda a conversa centralizada em um único painel — histórico, múltiplos atendentes e notas internas em um só lugar, sem depender de trocar de aplicativo.',
     },
     {
       q: 'Posso integrar com o meu Prontuário Eletrônico (PEP) atual?',
@@ -324,12 +324,12 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
             <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-semibold text-clinical-ink tracking-tight leading-[1.1]">
               Cada mensagem de paciente,{' '}
-              <span className="italic text-triage-red">triada com a mesma disciplina</span>{' '}
-              de um pronto-socorro
+              <span className="italic text-triage-red">triada com disciplina clínica</span>{' '}
+              e resposta ágil
             </h1>
 
             <p className="text-clinical-ink/60 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              Centralize atendimentos no WhatsApp Oficial, execute triagem com protocolo de Manchester, automatize
+              Centralize atendimentos no WhatsApp, execute triagem com protocolo de Manchester, automatize
               jornadas do paciente e sincronize com prontuários eletrônicos sob rigorosa conformidade com a LGPD.
             </p>
 
@@ -354,7 +354,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             <div className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-xs text-clinical-ink/50">
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-triage-green" />
-                WhatsApp Cloud API Oficial (Meta)
+                Conexão Real com WhatsApp
               </span>
               <span className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-triage-blue" />
@@ -410,7 +410,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       <section id="recursos" className="py-20 px-4 sm:px-8 max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
           <span className="text-xs font-bold uppercase tracking-wider text-triage-blue bg-triage-blue-soft border border-triage-blue/20 px-2.5 py-1 rounded-full">
-            Arquitetura Hospitalar Completa
+            Plataforma Completa para Clínicas de Saúde
           </span>
           <h2 className="font-serif text-2xl sm:text-4xl font-semibold text-clinical-ink tracking-tight">
             Tudo o que sua clínica necessita em um único ecossistema
@@ -525,7 +525,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             Escolha a capacidade ideal para sua clínica
           </h2>
           <p className="text-clinical-ink/55 text-xs sm:text-sm">
-            Sem taxa de adesão oculta. Todos os planos incluem WhatsApp Cloud API Oficial e conformidade LGPD.
+            Sem taxa de adesão oculta. Todos os planos incluem conexão real com WhatsApp e conformidade LGPD.
           </p>
 
           <div className="flex items-center justify-center gap-3 pt-4">
@@ -687,7 +687,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </h2>
 
           <p className="text-white/60 text-xs sm:text-sm max-w-xl mx-auto">
-            Experimente agora o ecossistema completo com triagem inteligente, conformidade LGPD e WhatsApp Cloud API.
+            Experimente agora o ecossistema completo com triagem inteligente, conformidade LGPD e WhatsApp integrado.
           </p>
 
           <button
