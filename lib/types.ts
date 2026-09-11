@@ -15,13 +15,11 @@ export type TabId =
 export type SensitiveAction = 
   | 'excluir_paciente'
   | 'unificar_duplicados'
-  | 'visualizar_duplicados'
   | 'exportar_dados_lgpd'
   | 'alterar_permissoes'
   | 'configurar_integracoes_pep'
   | 'gerenciar_cobranca'
   | 'disparar_webhooks_teste'
-  | 'gerenciar_unidades'
   | 'visualizar_prontuario_sensivel';
 
 export type UrgencyLevel = 'critica' | 'alta' | 'media' | 'baixa';
@@ -46,31 +44,6 @@ export interface Clinic {
   phone: string;
   address: string;
   logoUrl?: string;
-  razaoSocial?: string;
-  cnes?: string;
-  rtNome?: string;
-  rtCrm?: string;
-  whatsappAtendimento?: string;
-  emailContato?: string;
-  fusoHorario?: string;
-  horarioFuncionamento?: string;
-}
-
-/**
- * Unidade de atendimento — endereço físico distinto da clínica.
- * Toda clínica tem 1 unidade incluída no plano (isPrimary: true,
- * nunca excluível); unidades extras são contratadas à parte, com
- * valor mensal adicional.
- */
-export interface Unit {
-  id: string;
-  clinicId: string;
-  name: string;
-  address: string;
-  phone: string;
-  horarioFuncionamento?: string;
-  isPrimary: boolean;
-  createdAt: string;
 }
 
 export interface TrialInfo {
@@ -131,6 +104,14 @@ export interface Patient {
   notes: string;
   tags: string[];
   lastInteractionAt: string;
+  /**
+   * Quem enviou a última mensagem desta conversa — usado para calcular
+   * a contagem real do Sidebar ("Atendimentos": aguardando resposta da
+   * clínica = last message do paciente). Ausente em pacientes criados
+   * antes deste campo existir (tratado como 'attendant' por segurança,
+   * para não contar retroativamente como pendente).
+   */
+  lastMessageSender?: 'patient' | 'attendant';
   assignedUserId?: string;
   unreadCount?: number;
   originChannel: 'whatsapp' | 'telegram' | 'site' | 'instagram' | 'presencial';
@@ -138,8 +119,6 @@ export interface Patient {
   sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
   leadScore?: number;
   requiresHumanReview?: boolean;
-  /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */
-  createdAt?: string;
 }
 
 export interface ChatMessage {

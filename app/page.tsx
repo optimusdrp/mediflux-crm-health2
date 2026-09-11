@@ -24,7 +24,6 @@ import { AnaliseInteligenteView } from '@/components/views/AnaliseInteligenteVie
 
 // Modals
 import { DuplicateMergeModal } from '@/components/modals/DuplicateMergeModal';
-import { ProfileModal } from '@/components/modals/ProfileModal';
 import { NewPatientModal } from '@/components/modals/NewPatientModal';
 import { PatientEditModal } from '@/components/modals/PatientEditModal';
 import { TrialExpirationBanner } from '@/components/layout/TrialExpirationBanner';
@@ -34,16 +33,10 @@ import { UpgradeModal } from '@/components/modals/UpgradeModal';
 function MediFluxAppContent() {
   const { user, subscription, isTrialExpired, hasPermission, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('visao_geral');
-  // Correção de responsividade: controla se o Sidebar (menu lateral)
-  // está aberto em telas pequenas, onde ele fica recolhido por
-  // padrão. Em telas grandes (lg: e acima) isso é ignorado — o
-  // Sidebar permanece sempre visível.
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
 
   // Modals state
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -82,6 +75,65 @@ function MediFluxAppContent() {
     };
   }, [user]);
 
+  /**
+   * Contagens reais do Sidebar — antes eram valores fixos (2 e 1),
+   * sempre iguais independente de qualquer dado real (ver relato real
+   * do usuário: a fila aparecia vazia mas o badge mostrava "1").
+   *
+   * Regras confirmadas pelo usuário:
+   *  - "Atendimentos": total de conversas cujo ÚLTIMA mensagem foi do
+   *    paciente (lastMessageSender === 'patient') — aguardando resposta
+   *    da clínica.
+   *  - "Pendências & SLA": dentre essas, quantas já ultrapassaram o
+   *    tempo máximo de resposta configurado pela clínica
+   *    (settings.whatsappAlerts.slaAlertMinutes, editável em
+   *    Configurações → Alertas WhatsApp & SLA — 15 min é o padrão).
+   *
+   * Pacientes sem lastMessageSender (criados antes deste campo existir
+   * no backend) são tratados como 'attendant' — não entram em nenhuma
+   * das duas contagens, para não gerar um pico falso de pendências no
+   * dia em que este campo passar a existir.
+   */
+  const [awaitingReplyCount, setAwaitingReplyCount] = useState(0);
+  const [slaBreachedCount, setSlaBreachedCount] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!user) return;
+
+    const loadSidebarCounts = async () => {
+      try {
+        const [patientsRes, settingsRes] = await Promise.allSettled([apiService.getPatients(), apiService.getClinicSettings()]);
+        if (!isMounted) return;
+
+        const patientsList = patientsRes.status === 'fulfilled' ? patientsRes.value.patients || [] : [];
+        const slaMinutes =
+          settingsRes.status === 'fulfilled' ? settingsRes.value.settings?.whatsappAlerts?.slaAlertMinutes ?? 15 : 15;
+
+        const awaitingReply = patientsList.filter((p) => p.lastMessageSender === 'patient');
+        const now = Date.now();
+        const slaBreached = awaitingReply.filter((p) => {
+          const lastInteraction = new Date(p.lastInteractionAt).getTime();
+          if (Number.isNaN(lastInteraction)) return false;
+          const minutesSinceLastMessage = (now - lastInteraction) / (1000 * 60);
+          return minutesSinceLastMessage > slaMinutes;
+        });
+
+        setAwaitingReplyCount(awaitingReply.length);
+        setSlaBreachedCount(slaBreached.length);
+      } catch {
+        // Mantém os últimos valores conhecidos em caso de falha pontual
+      }
+    };
+
+    loadSidebarCounts();
+    const interval = setInterval(loadSidebarCounts, 60000); // recalcula a cada minuto — o tempo decorrido muda mesmo sem nenhuma ação do usuário
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
+
   const handleOpenEditModal = (patient: Patient) => {
     setPatientToEdit(patient);
     setIsEditModalOpen(true);
@@ -113,9 +165,8 @@ function MediFluxAppContent() {
       <Header
         onOpenDuplicatesModal={() => setIsDuplicateModalOpen(true)}
         duplicatesCount={duplicates.length}
+        onNavigateToLandingPage={() => setActiveTab('landing_page')}
         onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
-        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
       />
 
       {/* Trial Expiration Notification Banner (Warns when < 2 days) */}
@@ -129,10 +180,8 @@ function MediFluxAppContent() {
           onSelectTab={(tab) => {
             setActiveTab(tab);
           }}
-          pendingCount={2}
-          unreadMessagesCount={1}
-          isOpenOnMobile={isMobileSidebarOpen}
-          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          pendingCount={slaBreachedCount}
+          unreadMessagesCount={awaitingReplyCount}
         />
 
         {/* Dynamic View Container */}
@@ -186,7 +235,7 @@ function MediFluxAppContent() {
 
               {activeTab === 'indicadores' && <IndicadoresView />}
 
-              {activeTab === 'configuracoes' && <ConfiguracoesView onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)} />}
+              {activeTab === 'configuracoes' && <ConfiguracoesView />}
 
               {activeTab === 'auditoria_lgpd' && <AuditoriaLGPDView />}
 
@@ -203,9 +252,6 @@ function MediFluxAppContent() {
         duplicates={duplicates}
         onMergeComplete={() => loadDuplicates()}
       />
-
-      {/* Profile Modal */}
-      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
       {/* New Patient Modal */}
       <NewPatientModal
