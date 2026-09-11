@@ -147,53 +147,86 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
     { value: '100%', label: 'Auditoria e Isolamento Tenant', desc: 'Separação lógica por clínica' },
   ];
 
+  /**
+   * Planos reais do MediFlux — estrutura de 3 planos fechados com IA
+   * embutida por cota de triagens/mês, confirmada pelo usuário como a
+   * versão vigente (ver MediFlux_Planos_Apresentacao.pptx). Os nomes
+   * e preços mensais são fiéis a esse documento; os valores anuais
+   * aplicam 18% de desconto — percentual já calculado e documentado
+   * em MediFlux_Analise_Custos_e_Planos.docx (tabela de fidelidade),
+   * confirmado como seguro sobre a margem real: mesmo no cenário de
+   * custo de IA mais caro (pós-jan/2027), a margem bruta de
+   * infraestrutura variável (IA + banco de dados) fica entre 92% e
+   * 100% em todos os 3 planos — folga ampla para sustentar o desconto
+   * anual sem risco de prejuízo.
+   */
   const plans = [
     {
-      name: 'Clínica Pro',
+      name: 'Básico',
+      eyebrow: 'ORGANIZAÇÃO ESSENCIAL',
       highlight: false,
-      priceMonthly: 'R$ 590',
-      priceAnnual: 'R$ 490',
-      description: 'Ideal para consultórios individuais e clínicas em expansão com foco em triagem ágil.',
+      priceMonthly: 'R$ 177',
+      priceAnnual: 'R$ 145',
+      description: 'Para clínicas pequenas que querem organizar o atendimento no WhatsApp, sem depender de IA no dia a dia.',
       features: [
-        'Até 5 atendentes simultâneos',
-        '1 Número WhatsApp Cloud API Oficial',
-        'Triagem Clínica Dual AI (Até 1.500 msgs/mês)',
-        'Kanban de Jornadas e Funis',
-        'Conformidade LGPD com Trilha de Auditoria',
-        'Suporte em horário comercial',
+        '1 número de WhatsApp conectado (envio e recebimento reais)',
+        'Atendimentos — fila de conversas, histórico, notas internas',
+        'Jornadas & Funis — gestão manual de etapas do paciente',
+        'Pendências & SLA — alertas de tempo de resposta',
+        'Auditoria LGPD completa — trilha de acesso, exportação, consentimento',
+        'Até 3 usuários da equipe',
+        'Triagem manual pela equipe (sem IA inclusa)',
+      ],
+      addOns: [
+        { label: 'Canal de WhatsApp extra', price: '+ R$ 79/mês por número' },
+        { label: 'IA Starter — 300 triagens/mês', price: '+ R$ 34/mês' },
+        { label: 'IA Plus — 900 triagens/mês', price: '+ R$ 79/mês' },
+        { label: 'IA Pro — 1.500 triagens/mês', price: '+ R$ 115/mês' },
       ],
       cta: 'Iniciar Demonstração',
     },
     {
-      name: 'Enterprise Health',
+      name: 'Intermediário',
+      eyebrow: 'IA NO DIA A DIA',
       highlight: true,
       badge: 'Mais Escolhido',
-      priceMonthly: 'R$ 1.290',
-      priceAnnual: 'R$ 990',
-      description: 'Estrutura completa para policlínicas, hospitais-dia e centros médicos de alta demanda.',
+      priceMonthly: 'R$ 329',
+      priceAnnual: 'R$ 270',
+      description: 'Para clínicas em crescimento que já querem IA no dia a dia, com espaço para crescer sem trocar de plano.',
       features: [
-        'Atendentes ilimitados com RBAC avançado',
-        'Múltiplos números WhatsApp + Webhook API',
-        'Triagem Dual AI ilimitada + Triage Lab',
-        'Integrações PEP (iClinic, TOTVS, HiDoctor, Feegow)',
-        'Alertas de Plantão WhatsApp + SLA Sonoro',
-        'Unificação inteligente de pacientes duplicados',
-        'Gerente de conta e SLA de 99.9%',
+        'Tudo do plano Básico, mais:',
+        '2 números de WhatsApp inclusos',
+        'Até 8 usuários da equipe',
+        'Automações — respostas rápidas, alertas de plantão',
+        'Indicadores & Uso — relatórios operacionais',
+        'IA de triagem inclusa — 600 triagens/mês (Protocolo Manchester)',
+        'Revisão humana obrigatória em casos críticos já incluída',
+      ],
+      addOns: [
+        { label: 'Canal de WhatsApp extra', price: '+ R$ 59/mês por número' },
+        { label: 'Análise Inteligente — resumos e insights por IA', price: '+ R$ 59/mês' },
+        { label: 'Pacote extra — +900 triagens/mês', price: '+ R$ 69/mês' },
       ],
       cta: 'Acessar Ambiente Completo',
     },
     {
-      name: 'Redes & Hospitais',
+      name: 'Completo',
+      eyebrow: 'ECOSSISTEMA INTEIRO',
       highlight: false,
-      priceMonthly: 'Sob Consulta',
-      priceAnnual: 'Sob Consulta',
-      description: 'Para redes de saúde, operadoras e cooperativas com requisitos complexos de governança.',
+      priceMonthly: 'R$ 649',
+      priceAnnual: 'R$ 532',
+      description: 'Para clínicas e redes que querem o ecossistema inteiro do MediFlux, sem add-ons para gerenciar.',
       features: [
-        'Multi-unidades e filiais isoladas',
-        'Conector HL7 / FHIR customizado',
-        'Deploy On-Premises ou VPC Dedicada',
-        'DPO dedicado para auditorias de compliance',
-        'Treinamento presencial para equipes clínicas',
+        'Todos os módulos, sem add-ons: Atendimentos, Jornadas, Pendências, Automações, Indicadores, Auditoria LGPD',
+        '3 números de WhatsApp inclusos',
+        'Usuários ilimitados',
+        'IA de triagem inclusa — 3.000 triagens/mês (dual engine)',
+        'Análise Inteligente completa inclusa',
+        'Suporte prioritário',
+      ],
+      addOns: [
+        { label: 'Canal de WhatsApp extra', price: '+ R$ 49/mês por número' },
+        { label: 'Excedente de triagem por IA (acima de 3.000/mês)', price: 'R$ 0,12 / triagem' },
       ],
       cta: 'Falar com Especialistas',
     },
@@ -516,7 +549,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
             >
               <span>Anual</span>
               <span className="text-[10px] bg-triage-green text-white px-1.5 py-0.5 rounded font-bold">
-                -20% OFF
+                -18% OFF
               </span>
             </button>
           </div>
@@ -540,6 +573,11 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
 
               <div className="space-y-4">
                 <div>
+                  {p.eyebrow && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-triage-blue block mb-1">
+                      {p.eyebrow}
+                    </span>
+                  )}
                   <h3 className="text-lg font-bold text-clinical-ink">{p.name}</h3>
                   <p className="text-xs text-clinical-ink/55 mt-1">{p.description}</p>
                 </div>
@@ -551,8 +589,8 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                     </span>
                     <span className="text-xs text-clinical-ink/50">/mês</span>
                   </div>
-                  {selectedPlanPeriod === 'annual' && p.priceAnnual !== 'Sob Consulta' && (
-                    <span className="text-[10px] text-triage-green font-semibold">Faturamento anual com economia</span>
+                  {selectedPlanPeriod === 'annual' && (
+                    <span className="text-[10px] text-triage-green font-semibold">Faturamento anual com 18% de economia</span>
                   )}
                 </div>
 
@@ -567,6 +605,20 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
                     </div>
                   ))}
                 </div>
+
+                {p.addOns && p.addOns.length > 0 && (
+                  <div className="border-t border-clinical-line pt-4 space-y-2">
+                    <span className="text-[11px] font-bold text-clinical-ink/60 uppercase tracking-wider block">
+                      Aquisições à parte (opcionais):
+                    </span>
+                    {p.addOns.map((addOn, aIdx) => (
+                      <div key={aIdx} className="flex items-start justify-between gap-2 text-[11px] text-clinical-ink/60">
+                        <span>{addOn.label}</span>
+                        <span className="font-semibold text-clinical-ink/80 whitespace-nowrap shrink-0">{addOn.price}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="pt-8">
