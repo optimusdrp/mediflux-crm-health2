@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Patient, Appointment, TabId } from '@/lib/types';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,6 +17,8 @@ import {
   ChevronRight,
   ShieldCheck,
   RefreshCw,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 
 interface VisaoGeralViewProps {
@@ -79,6 +81,58 @@ export function VisaoGeralView({
   const pendingReviewCount = patients.filter((p) => p.requiresHumanReview).length;
   const scheduledCount = appointments.length;
 
+  /**
+   * Comparação real "pacientes novos este mês vs. mesmo período do
+   * mês anterior" — substitui o "+12% vs mês anterior" que existia
+   * antes (texto fixo, sem cálculo nenhum por trás; ver relato real
+   * do usuário). Usa Patient.createdAt (campo novo — pacientes
+   * cadastrados antes dele existir não têm essa data, e por isso
+   * ficam de fora da comparação, não são contados como "de nenhum
+   * mês" para não distorcer o percentual).
+   *
+   * "Mesmo período" = mesmo número de dias corridos desde o início
+   * de cada mês até hoje — evita comparar um mês inteiro (30 dias)
+   * contra um mês parcial (ex.: os 5 primeiros dias do mês atual),
+   * o que sempre daria uma queda artificial.
+   */
+  const newPatientsComparison = useMemo(() => {
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfComparableWindowThisMonth = new Date(now.getFullYear(), now.getMonth(), dayOfMonth, 23, 59, 59, 999);
+
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfComparableWindowLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth, 23, 59, 59, 999);
+
+    let newThisMonth = 0;
+    let newLastMonth = 0;
+    let hasAnyDatedPatient = false;
+
+    for (const p of patients) {
+      if (!p.createdAt) continue; // paciente cadastrado antes do campo existir — não entra na comparação
+      const created = new Date(p.createdAt);
+      if (Number.isNaN(created.getTime())) continue;
+      hasAnyDatedPatient = true;
+
+      if (created >= startOfThisMonth && created <= endOfComparableWindowThisMonth) newThisMonth++;
+      else if (created >= startOfLastMonth && created <= endOfComparableWindowLastMonth) newLastMonth++;
+    }
+
+    // Sem nenhum paciente com data registrada ainda (ex.: recém-migrado
+    // para esta versão) — não há base nenhuma para comparar.
+    if (!hasAnyDatedPatient) return { available: false as const };
+
+    // Sem nenhum cadastro no mesmo período do mês anterior — a divisão
+    // por zero não representa "queda de 100%", representa "sem base de
+    // comparação ainda" (comum nos primeiros ~30 dias após o campo
+    // createdAt começar a ser preenchido).
+    if (newLastMonth === 0) return { available: false as const };
+
+    const percentChange = Math.round(((newThisMonth - newLastMonth) / newLastMonth) * 100);
+    return { available: true as const, percentChange, newThisMonth, newLastMonth };
+  }, [patients]);
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header simples — sem o card decorativo removido a pedido do usuário */}
@@ -124,13 +178,26 @@ export function VisaoGeralView({
           </div>
           <div className="mt-3">
             <span className="text-2xl font-extrabold text-slate-900">{totalPatients}</span>
-            {/* Removida a alegação "+12% vs mês anterior" que existia
-                aqui antes: era texto fixo, sempre igual, sem nenhum
-                cálculo real por trás — e o backend hoje não guarda a
-                data de cadastro do paciente, então essa comparação
-                não pode ser calculada de verdade ainda. Reintroduzir
-                isso exige adicionar createdAt a Patient e aguardar
-                pelo menos 2 meses de dados reais acumulados. */}
+            {/* Comparação real (substitui o "+12% vs mês anterior" fixo
+                e falso que existia aqui antes) — só aparece quando há
+                base de dados suficiente (pacientes com createdAt
+                registrado no mesmo período do mês anterior). Ver
+                newPatientsComparison acima para os detalhes do cálculo. */}
+            {newPatientsComparison.available && (
+              <div
+                className={`flex items-center gap-1.5 text-[11px] font-medium mt-1 ${
+                  newPatientsComparison.percentChange >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {newPatientsComparison.percentChange >= 0 ? (
+                  <TrendingUp className="w-3.5 h-3.5" />
+                ) : (
+                  <TrendingDown className="w-3.5 h-3.5" />
+                )}
+                {newPatientsComparison.percentChange >= 0 ? '+' : ''}
+                {newPatientsComparison.percentChange}% vs mês anterior
+              </div>
+            )}
           </div>
         </div>
 

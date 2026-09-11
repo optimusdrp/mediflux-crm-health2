@@ -138,6 +138,8 @@ export interface Patient {
   sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
   leadScore?: number;
   requiresHumanReview?: boolean;
+  /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */
+  createdAt?: string;
 }
 
 export interface ChatMessage {
