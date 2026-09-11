@@ -24,6 +24,7 @@ import { AnaliseInteligenteView } from '@/components/views/AnaliseInteligenteVie
 
 // Modals
 import { DuplicateMergeModal } from '@/components/modals/DuplicateMergeModal';
+import { ProfileModal } from '@/components/modals/ProfileModal';
 import { NewPatientModal } from '@/components/modals/NewPatientModal';
 import { PatientEditModal } from '@/components/modals/PatientEditModal';
 import { TrialExpirationBanner } from '@/components/layout/TrialExpirationBanner';
@@ -37,6 +38,12 @@ function MediFluxAppContent() {
 
   // Modals state
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  // Correção de responsividade: controla se o Sidebar (menu lateral)
+  // está aberto em telas pequenas, onde ele fica recolhido por
+  // padrão. Em telas grandes (lg: e acima) isso é ignorado — o
+  // Sidebar permanece sempre visível.
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -165,8 +172,9 @@ function MediFluxAppContent() {
       <Header
         onOpenDuplicatesModal={() => setIsDuplicateModalOpen(true)}
         duplicatesCount={duplicates.length}
-        onNavigateToLandingPage={() => setActiveTab('landing_page')}
         onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
       />
 
       {/* Trial Expiration Notification Banner (Warns when < 2 days) */}
@@ -182,6 +190,8 @@ function MediFluxAppContent() {
           }}
           pendingCount={slaBreachedCount}
           unreadMessagesCount={awaitingReplyCount}
+          isOpenOnMobile={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* Dynamic View Container */}
@@ -252,6 +262,9 @@ function MediFluxAppContent() {
         duplicates={duplicates}
         onMergeComplete={() => loadDuplicates()}
       />
+
+      {/* Profile Modal */}
+      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
       {/* New Patient Modal */}
       <NewPatientModal
