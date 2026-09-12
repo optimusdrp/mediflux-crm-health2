@@ -15,11 +15,13 @@ export type TabId =
 export type SensitiveAction = 
   | 'excluir_paciente'
   | 'unificar_duplicados'
+  | 'visualizar_duplicados'
   | 'exportar_dados_lgpd'
   | 'alterar_permissoes'
   | 'configurar_integracoes_pep'
   | 'gerenciar_cobranca'
   | 'disparar_webhooks_teste'
+  | 'gerenciar_unidades'
   | 'visualizar_prontuario_sensivel';
 
 export type UrgencyLevel = 'critica' | 'alta' | 'media' | 'baixa';
@@ -44,6 +46,33 @@ export interface Clinic {
   phone: string;
   address: string;
   logoUrl?: string;
+  razaoSocial?: string;
+  cnes?: string;
+  rtNome?: string;
+  rtCrm?: string;
+  whatsappAtendimento?: string;
+  emailContato?: string;
+  fusoHorario?: string;
+  horarioFuncionamento?: string;
+}
+
+/**
+ * Unidade de atendimento — endereço físico distinto da clínica.
+ * Toda clínica tem 1 unidade incluída no plano (isPrimary: true,
+ * nunca excluível); unidades extras são contratadas à parte, com
+ * valor mensal adicional. Faltava esta interface em types.ts —
+ * causa real da falha de build (Header.tsx e api.ts já importavam
+ * Unit daqui, mas o tipo nunca tinha sido adicionado neste arquivo).
+ */
+export interface Unit {
+  id: string;
+  clinicId: string;
+  name: string;
+  address: string;
+  phone: string;
+  horarioFuncionamento?: string;
+  isPrimary: boolean;
+  createdAt: string;
 }
 
 export interface TrialInfo {
@@ -77,6 +106,8 @@ export interface Subscription {
   nextBillingAt: string;
   trialEndsAt?: string;
   trialInfo?: TrialInfo;
+  /** Quantidade de unidades extras contratadas, além da 1 unidade incluída no plano base. */
+  extraUnitsContracted?: number;
 }
 
 export interface UsageRecord {
@@ -119,6 +150,8 @@ export interface Patient {
   sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
   leadScore?: number;
   requiresHumanReview?: boolean;
+  /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */
+  createdAt?: string;
 }
 
 export interface ChatMessage {
