@@ -21,6 +21,15 @@ interface SidebarProps {
   onSelectTab: (tab: TabId) => void;
   pendingCount?: number;
   unreadMessagesCount?: number;
+  /**
+   * Controle de exibição em telas pequenas — correção de
+   * responsividade (o menu ficava sempre visível em 256px fixos,
+   * sobrepondo/empurrando todo o conteúdo em telas de celular). Em
+   * telas grandes (lg: e acima) o Sidebar ignora esses props e
+   * permanece sempre visível, como antes.
+   */
+  isOpenOnMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export function Sidebar({
@@ -28,6 +37,8 @@ export function Sidebar({
   onSelectTab,
   pendingCount = 2,
   unreadMessagesCount = 1,
+  isOpenOnMobile = false,
+  onCloseMobile,
 }: SidebarProps) {
   const { hasPermission, user } = useAuth();
 
@@ -102,66 +113,89 @@ export function Sidebar({
   ];
 
   return (
-    <aside className="w-64 shrink-0 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 select-none min-h-[calc(100vh-61px)]">
-      {/* Navigation Links */}
-      <div className="p-3 space-y-1">
-        <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-          Módulos do Sistema
-        </div>
+    <>
+      {/* Overlay escuro atrás do menu, só em mobile quando aberto — toca para fechar */}
+      {isOpenOnMobile && (
+        <div
+          className="lg:hidden fixed inset-0 bg-slate-900/50 z-40"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
 
-        {menuItems.map((item) => {
-          const isPermitted = hasPermission(item.id);
-          const isActive = activeTab === item.id;
+      <aside
+        className={`
+          w-64 shrink-0 bg-slate-900 text-slate-300 flex flex-col justify-between border-r border-slate-800 select-none
+          fixed lg:static inset-y-0 left-0 z-50 lg:z-auto
+          transform transition-transform duration-200 ease-in-out
+          ${isOpenOnMobile ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
+          min-h-screen lg:min-h-[calc(100vh-61px)]
+          overflow-y-auto
+        `}
+      >
+        {/* Navigation Links */}
+        <div className="p-3 space-y-1">
+          <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Módulos do Sistema
+          </div>
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group relative ${
-                isActive
-                  ? 'bg-sky-600 text-white font-semibold shadow-md shadow-sky-900/30'
-                  : isPermitted
-                  ? 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                  : 'text-slate-500 hover:bg-slate-800/40 cursor-not-allowed opacity-60'
-              }`}
-              id={`nav-tab-${item.id}`}
-            >
-              <div className="flex items-center gap-2.5 truncate">
-                <item.icon
-                  className={`w-4 h-4 shrink-0 ${
-                    isActive ? 'text-white' : isPermitted ? 'text-slate-400 group-hover:text-white' : 'text-slate-600'
-                  }`}
-                />
-                <span className="truncate">{item.label}</span>
-              </div>
+          {menuItems.map((item) => {
+            const isPermitted = hasPermission(item.id);
+            const isActive = activeTab === item.id;
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {!isPermitted && <Lock className="w-3.5 h-3.5 text-slate-500" />}
-                {item.badge !== undefined && isPermitted && (
-                  <span
-                    className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md leading-none ${
-                      item.badgeColor || 'bg-slate-700 text-slate-200'
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  onSelectTab(item.id);
+                  onCloseMobile?.();
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group relative ${
+                  isActive
+                    ? 'bg-sky-600 text-white font-semibold shadow-md shadow-sky-900/30'
+                    : isPermitted
+                    ? 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    : 'text-slate-500 hover:bg-slate-800/40 cursor-not-allowed opacity-60'
+                }`}
+                id={`nav-tab-${item.id}`}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <item.icon
+                    className={`w-4 h-4 shrink-0 ${
+                      isActive ? 'text-white' : isPermitted ? 'text-slate-400 group-hover:text-white' : 'text-slate-600'
                     }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                  />
+                  <span className="truncate">{item.label}</span>
+                </div>
 
-      {/* Footer Info / LGPD & Multi-tenancy status */}
-      <div className="p-3 m-3 bg-slate-800/60 rounded-xl border border-slate-700/60 text-[11px]">
-        <div className="flex items-center justify-between text-slate-400 mb-1">
-          <span>Isolamento Multi-Tenant</span>
-          <span className="text-emerald-400 font-semibold">Ativo</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {!isPermitted && <Lock className="w-3.5 h-3.5 text-slate-500" />}
+                  {item.badge !== undefined && isPermitted && (
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md leading-none ${
+                        item.badgeColor || 'bg-slate-700 text-slate-200'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
-        <div className="text-slate-500 leading-tight">
-          Sessão segura vinculada ao ID da clínica: <span className="font-mono text-slate-400">{user?.clinicId}</span>
+
+        {/* Footer Info / LGPD & Multi-tenancy status */}
+        <div className="p-3 m-3 bg-slate-800/60 rounded-xl border border-slate-700/60 text-[11px]">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span>Isolamento Multi-Tenant</span>
+            <span className="text-emerald-400 font-semibold">Ativo</span>
+          </div>
+          <div className="text-slate-500 leading-tight">
+            Sessão segura vinculada ao ID da clínica: <span className="font-mono text-slate-400">{user?.clinicId}</span>
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
