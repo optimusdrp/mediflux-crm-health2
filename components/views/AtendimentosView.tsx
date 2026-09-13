@@ -37,6 +37,7 @@ import {
   Copy,
   Check,
   ChevronsRight,
+  ChevronsLeft,
   X,
 } from 'lucide-react';
 
@@ -80,16 +81,19 @@ export function AtendimentosView({
    * segundos em telas sensíveis ao toque — mesmo padrão já usado no
    * menu lateral recolhível.
    *
-   * Comportamento correto (igual ao menu lateral, não card a card):
-   * um único botão recolhe a COLUNA INTEIRA, virando uma faixa
-   * estreita só com os 3 ícones (Ficha, Checklist, Triagem). Com a
-   * coluna recolhida, o usuário clica em qual ícone quer ver — só um
-   * card fica visível por vez, ocupando o espaço que a coluna tem
-   * disponível; os outros ficam ocultos até serem selecionados.
+   * Comportamento correto: um único botão recolhe a COLUNA INTEIRA,
+   * virando uma faixa estreita só com os 3 ícones (Ficha, Checklist,
+   * Triagem). Com a coluna recolhida, o usuário tem duas opções: (1)
+   * clicar num ícone específico abre UM POP-UP FLUTUANTE só com
+   * aquele card, sem precisar expandir a coluna inteira; (2) um botão
+   * separado expande a coluna de volta ao normal, com TODOS os cards
+   * visíveis ao mesmo tempo lado a lado, como sempre foi.
    */
   type ClinicalCardId = 'ficha' | 'checklist' | 'triagem';
   const [isClinicalColumnCollapsed, setIsClinicalColumnCollapsed] = useState(false);
-  const [selectedClinicalCard, setSelectedClinicalCard] = useState<ClinicalCardId>('ficha');
+  // Card aberto como pop-up flutuante (só existe enquanto a coluna
+  // está recolhida) — null quando nenhum pop-up está aberto.
+  const [popupCard, setPopupCard] = useState<ClinicalCardId | null>(null);
 
   const [tooltipCard, setTooltipCard] = useState<ClinicalCardId | null>(null);
   const cardLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -889,9 +893,11 @@ export function AtendimentosView({
         {selectedPatient ? (
           <>
             {isClinicalColumnCollapsed ? (
-              /* Coluna recolhida — barra vertical só com os 3 ícones. Clicar em
-                 um deles expande a coluna já mostrando aquele card específico. */
-              <div className="p-2 space-y-1.5">
+              /* Coluna recolhida — barra vertical só com os 3 ícones.
+                 Clicar num ícone abre um POP-UP flutuante só com aquele
+                 card (sem expandir a coluna). O botão de baixo expande
+                 a coluna inteira, com todos os cards lado a lado. */
+              <div className="p-2 space-y-1.5 flex flex-col items-center">
                 {(
                   [
                     { id: 'ficha' as ClinicalCardId, icon: User, label: 'Ficha do Paciente', color: 'text-slate-500' },
@@ -899,12 +905,9 @@ export function AtendimentosView({
                     { id: 'triagem' as ClinicalCardId, icon: Sparkles, label: 'Triagem & Protocolo Clínico', color: 'text-purple-600' },
                   ]
                 ).map((card) => (
-                  <div key={card.id} className="relative">
+                  <div key={card.id} className="relative w-full">
                     <button
-                      onClick={() => {
-                        setSelectedClinicalCard(card.id);
-                        setIsClinicalColumnCollapsed(false);
-                      }}
+                      onClick={() => setPopupCard(card.id)}
                       onMouseEnter={() => setTooltipCard(card.id)}
                       onMouseLeave={() => setTooltipCard(null)}
                       onTouchStart={() => handleCardTouchStart(card.id)}
@@ -922,6 +925,16 @@ export function AtendimentosView({
                     )}
                   </div>
                 ))}
+
+                <div className="w-full border-t border-slate-200 my-1" />
+
+                <button
+                  onClick={() => setIsClinicalColumnCollapsed(false)}
+                  className="w-full flex items-center justify-center p-2.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  title="Expandir painel inteiro"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
               </div>
             ) : (
             <div className="p-4 space-y-4">
@@ -935,7 +948,6 @@ export function AtendimentosView({
             </button>
 
             {/* Patient Header Card */}
-            {selectedClinicalCard === 'ficha' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Ficha do Paciente</span>
@@ -967,10 +979,8 @@ export function AtendimentosView({
                 </div>
               </div>
             </div>
-            )}
 
             {/* Checklist de Atendimento */}
-            {selectedClinicalCard === 'checklist' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5">
               <h5 className="font-bold text-xs text-slate-800 flex items-center justify-between">
                 <span>Checklist de Entrada</span>
@@ -1015,10 +1025,8 @@ export function AtendimentosView({
                 </div>
               </div>
             </div>
-            )}
 
             {/* AI Insights & Clinical Triage Protocol */}
-            {selectedClinicalCard === 'triagem' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
@@ -1157,7 +1165,6 @@ export function AtendimentosView({
                 </div>
               )}
             </div>
-            )}
 
             {/* Delete Patient (Sensitive Action) */}
             <div className="pt-2">
@@ -1173,6 +1180,160 @@ export function AtendimentosView({
           </>
         ) : null}
       </div>
+
+      {/* Pop-up flutuante — card individual, aberto a partir da barra de ícones da coluna recolhida */}
+      {popupCard && selectedPatient && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setPopupCard(null)}>
+          <div
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[85vh] overflow-y-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                {popupCard === 'ficha' && (
+                  <>
+                    <User className="w-4 h-4 text-slate-500" /> Ficha do Paciente
+                  </>
+                )}
+                {popupCard === 'checklist' && (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Checklist de Entrada
+                  </>
+                )}
+                {popupCard === 'triagem' && (
+                  <>
+                    <Sparkles className="w-4 h-4 text-purple-600" /> Triagem & Protocolo Clínico
+                  </>
+                )}
+              </span>
+              <button onClick={() => setPopupCard(null)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {popupCard === 'ficha' && (
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Dados Cadastrais</span>
+                  <button
+                    onClick={() => onOpenEditModal(selectedPatient)}
+                    className="p-1 text-slate-600 hover:text-sky-600 hover:bg-white rounded-md transition-colors"
+                    title="Editar cadastro"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <h4 className="font-bold text-sm text-slate-900">{selectedPatient.name}</h4>
+                <div className="text-xs text-slate-600 mt-1 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Phone className="w-3 h-3 text-slate-400" />
+                    <span>{selectedPatient.phone}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CreditCard className="w-3 h-3 text-slate-400" />
+                    <span>
+                      {selectedPatient.healthInsurance}{' '}
+                      {selectedPatient.planNumber ? `• Nº ${selectedPatient.planNumber}` : ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    <span>Nascimento: {selectedPatient.birthDate || 'Não informado'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {popupCard === 'checklist' && (
+              <div className="space-y-1.5 text-xs text-slate-700">
+                <div onClick={() => handleToggleChecklist('doc_enviado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  {selectedPatient.checklist.doc_enviado ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span>Documento com Foto (RG/CNH)</span>
+                </div>
+                <div onClick={() => handleToggleChecklist('convenio_validado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  {selectedPatient.checklist.convenio_validado ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span>Elegibilidade de Convênio</span>
+                </div>
+                <div onClick={() => handleToggleChecklist('termo_assinado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  {selectedPatient.checklist.termo_assinado ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span>Termo de Consentimento LGPD</span>
+                </div>
+              </div>
+            )}
+
+            {popupCard === 'triagem' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs ${urgencyStyles[selectedPatient.urgency]?.badge}`}>
+                    {selectedPatient.urgency.toUpperCase()}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-slate-800 font-semibold">
+                    <span className="flex items-center gap-1 text-[11px]">
+                      <Activity className="w-3.5 h-3.5 text-sky-600" />
+                      {activeTriageResult?.suggestedProtocol || 'Protocolo Clínico Manchester'}
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      SLA: {activeTriageResult?.slaMinutes !== undefined ? `${activeTriageResult.slaMinutes} min` : (selectedPatient.urgency === 'critica' ? '0 min' : selectedPatient.urgency === 'alta' ? '10 min' : selectedPatient.urgency === 'media' ? '60 min' : '120 min')}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 leading-relaxed">
+                    {selectedPatient.aiSummary || activeTriageResult?.recommendedAction || 'Triagem automática do histórico de mensagens.'}
+                  </div>
+                </div>
+                {activeTriageResult?.redFlags && activeTriageResult.redFlags.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wide flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-rose-600" /> Sinais de Alarme
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {activeTriageResult.redFlags.map((rf, idx) => (
+                        <span key={idx} className="text-[10px] bg-rose-100 text-rose-900 font-semibold px-2 py-0.5 rounded">
+                          ⚠️ {rf}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(activeTriageResult?.suggestedAttendantResponse || activeTriageResult?.recommendedAction) && (
+                  <div className="p-2.5 bg-purple-50/80 rounded-lg border border-purple-200 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-purple-950">
+                      <span>Sugestão de Resposta:</span>
+                      <button
+                        onClick={() => {
+                          const reply = activeTriageResult?.suggestedAttendantResponse || activeTriageResult?.recommendedAction || '';
+                          setInputText(reply);
+                          setPopupCard(null);
+                        }}
+                        className="flex items-center gap-1 text-[10px] text-purple-700 hover:text-purple-900 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded font-semibold transition-colors"
+                      >
+                        <Copy className="w-3 h-3" /> Inserir no Chat
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-purple-900 leading-relaxed italic bg-white/70 p-2 rounded border border-purple-100">
+                      &ldquo;{activeTriageResult?.suggestedAttendantResponse || activeTriageResult?.recommendedAction}&rdquo;
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
