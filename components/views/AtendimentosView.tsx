@@ -36,7 +36,7 @@ import {
   Activity,
   Copy,
   Check,
-  ChevronsUp,
+  ChevronsRight,
   X,
 } from 'lucide-react';
 
@@ -79,19 +79,21 @@ export function AtendimentosView({
    * card aparece no hover do mouse, ou ao pressionar/tocar por 2
    * segundos em telas sensíveis ao toque — mesmo padrão já usado no
    * menu lateral recolhível.
+   *
+   * Comportamento correto (igual ao menu lateral, não card a card):
+   * um único botão recolhe a COLUNA INTEIRA, virando uma faixa
+   * estreita só com os 3 ícones (Ficha, Checklist, Triagem). Com a
+   * coluna recolhida, o usuário clica em qual ícone quer ver — só um
+   * card fica visível por vez, ocupando o espaço que a coluna tem
+   * disponível; os outros ficam ocultos até serem selecionados.
    */
-  const [minimizedCards, setMinimizedCards] = useState<Record<'ficha' | 'checklist' | 'triagem', boolean>>({
-    ficha: false,
-    checklist: false,
-    triagem: false,
-  });
-  const toggleCardMinimized = (card: 'ficha' | 'checklist' | 'triagem') => {
-    setMinimizedCards((prev) => ({ ...prev, [card]: !prev[card] }));
-  };
+  type ClinicalCardId = 'ficha' | 'checklist' | 'triagem';
+  const [isClinicalColumnCollapsed, setIsClinicalColumnCollapsed] = useState(false);
+  const [selectedClinicalCard, setSelectedClinicalCard] = useState<ClinicalCardId>('ficha');
 
-  const [tooltipCard, setTooltipCard] = useState<'ficha' | 'checklist' | 'triagem' | null>(null);
+  const [tooltipCard, setTooltipCard] = useState<ClinicalCardId | null>(null);
   const cardLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleCardTouchStart = (card: 'ficha' | 'checklist' | 'triagem') => {
+  const handleCardTouchStart = (card: ClinicalCardId) => {
     cardLongPressTimerRef.current = setTimeout(() => setTooltipCard(card), 2000);
   };
   const clearCardLongPress = () => {
@@ -878,51 +880,72 @@ export function AtendimentosView({
         )}
       </div>
 
-      {/* COLUMN 3: Clinical Card & AI Insights (340px) */}
-      <div className="w-full lg:w-80 shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto p-4 space-y-4">
+      {/* COLUMN 3: Clinical Card & AI Insights (340px, ou 64px recolhida) */}
+      <div
+        className={`${
+          isClinicalColumnCollapsed ? 'w-16' : 'w-full lg:w-80'
+        } shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto transition-[width] duration-200`}
+      >
         {selectedPatient ? (
           <>
-            {/* Patient Header Card */}
-            {minimizedCards.ficha ? (
-              <div className="relative">
-                <button
-                  onClick={() => toggleCardMinimized('ficha')}
-                  onMouseEnter={() => setTooltipCard('ficha')}
-                  onMouseLeave={() => setTooltipCard(null)}
-                  onTouchStart={() => handleCardTouchStart('ficha')}
-                  onTouchEnd={clearCardLongPress}
-                  onTouchCancel={clearCardLongPress}
-                  className="w-full flex items-center justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
-                  title="Ficha do Paciente"
-                >
-                  <User className="w-4 h-4 text-slate-500" />
-                </button>
-                {tooltipCard === 'ficha' && (
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
-                    Ficha do Paciente
+            {isClinicalColumnCollapsed ? (
+              /* Coluna recolhida — barra vertical só com os 3 ícones. Clicar em
+                 um deles expande a coluna já mostrando aquele card específico. */
+              <div className="p-2 space-y-1.5">
+                {(
+                  [
+                    { id: 'ficha' as ClinicalCardId, icon: User, label: 'Ficha do Paciente', color: 'text-slate-500' },
+                    { id: 'checklist' as ClinicalCardId, icon: ShieldCheck, label: 'Checklist de Entrada', color: 'text-emerald-600' },
+                    { id: 'triagem' as ClinicalCardId, icon: Sparkles, label: 'Triagem & Protocolo Clínico', color: 'text-purple-600' },
+                  ]
+                ).map((card) => (
+                  <div key={card.id} className="relative">
+                    <button
+                      onClick={() => {
+                        setSelectedClinicalCard(card.id);
+                        setIsClinicalColumnCollapsed(false);
+                      }}
+                      onMouseEnter={() => setTooltipCard(card.id)}
+                      onMouseLeave={() => setTooltipCard(null)}
+                      onTouchStart={() => handleCardTouchStart(card.id)}
+                      onTouchEnd={clearCardLongPress}
+                      onTouchCancel={clearCardLongPress}
+                      className="w-full flex items-center justify-center p-2.5 rounded-xl hover:bg-slate-100 transition-colors"
+                      title={card.label}
+                    >
+                      <card.icon className={`w-4 h-4 ${card.color}`} />
+                    </button>
+                    {tooltipCard === card.id && (
+                      <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
+                        {card.label}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
             ) : (
+            <div className="p-4 space-y-4">
+            {/* Botão de recolher a coluna inteira */}
+            <button
+              onClick={() => setIsClinicalColumnCollapsed(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+              title="Recolher painel"
+            >
+              <ChevronsRight className="w-3.5 h-3.5" /> Recolher painel
+            </button>
+
+            {/* Patient Header Card */}
+            {selectedClinicalCard === 'ficha' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Ficha do Paciente</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onOpenEditModal(selectedPatient)}
-                    className="p-1 text-slate-600 hover:text-sky-600 hover:bg-white rounded-md transition-colors"
-                    title="Editar cadastro"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => toggleCardMinimized('ficha')}
-                    className="p-1 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors"
-                    title="Minimizar"
-                  >
-                    <ChevronsUp className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => onOpenEditModal(selectedPatient)}
+                  className="p-1 text-slate-600 hover:text-sky-600 hover:bg-white rounded-md transition-colors"
+                  title="Editar cadastro"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
               </div>
 
               <h4 className="font-bold text-sm text-slate-900">{selectedPatient.name}</h4>
@@ -947,40 +970,11 @@ export function AtendimentosView({
             )}
 
             {/* Checklist de Atendimento */}
-            {minimizedCards.checklist ? (
-              <div className="relative">
-                <button
-                  onClick={() => toggleCardMinimized('checklist')}
-                  onMouseEnter={() => setTooltipCard('checklist')}
-                  onMouseLeave={() => setTooltipCard(null)}
-                  onTouchStart={() => handleCardTouchStart('checklist')}
-                  onTouchEnd={clearCardLongPress}
-                  onTouchCancel={clearCardLongPress}
-                  className="w-full flex items-center justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
-                  title="Checklist de Entrada"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                </button>
-                {tooltipCard === 'checklist' && (
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
-                    Checklist de Entrada
-                  </div>
-                )}
-              </div>
-            ) : (
+            {selectedClinicalCard === 'checklist' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5">
               <h5 className="font-bold text-xs text-slate-800 flex items-center justify-between">
                 <span>Checklist de Entrada</span>
-                <div className="flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <button
-                    onClick={() => toggleCardMinimized('checklist')}
-                    className="p-1 -mr-1 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors"
-                    title="Minimizar"
-                  >
-                    <ChevronsUp className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
               </h5>
 
               <div className="space-y-1.5 text-xs text-slate-700">
@@ -1024,44 +1018,15 @@ export function AtendimentosView({
             )}
 
             {/* AI Insights & Clinical Triage Protocol */}
-            {minimizedCards.triagem ? (
-              <div className="relative">
-                <button
-                  onClick={() => toggleCardMinimized('triagem')}
-                  onMouseEnter={() => setTooltipCard('triagem')}
-                  onMouseLeave={() => setTooltipCard(null)}
-                  onTouchStart={() => handleCardTouchStart('triagem')}
-                  onTouchEnd={clearCardLongPress}
-                  onTouchCancel={clearCardLongPress}
-                  className="w-full flex items-center justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors"
-                  title="Triagem & Protocolo Clínico"
-                >
-                  <Sparkles className="w-4 h-4 text-purple-600" />
-                </button>
-                {tooltipCard === 'triagem' && (
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
-                    Triagem & Protocolo Clínico
-                  </div>
-                )}
-              </div>
-            ) : (
+            {selectedClinicalCard === 'triagem' && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Triagem & Protocolo Clínico
                 </span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs ${urgencyStyles[selectedPatient.urgency]?.badge}`}>
-                    {selectedPatient.urgency.toUpperCase()}
-                  </span>
-                  <button
-                    onClick={() => toggleCardMinimized('triagem')}
-                    className="p-1 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors"
-                    title="Minimizar"
-                  >
-                    <ChevronsUp className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs ${urgencyStyles[selectedPatient.urgency]?.badge}`}>
+                  {selectedPatient.urgency.toUpperCase()}
+                </span>
               </div>
 
               {/* Protocol & SLA */}
@@ -1203,6 +1168,8 @@ export function AtendimentosView({
                 <Trash2 className="w-3.5 h-3.5" /> Excluir Atendimento (LGPD)
               </button>
             </div>
+            </div>
+            )}
           </>
         ) : null}
       </div>
