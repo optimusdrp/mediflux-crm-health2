@@ -21,6 +21,7 @@ import { IndicadoresView } from '@/components/views/IndicadoresView';
 import { ConfiguracoesView } from '@/components/views/ConfiguracoesView';
 import { AuditoriaLGPDView } from '@/components/views/AuditoriaLGPDView';
 import { AnaliseInteligenteView } from '@/components/views/AnaliseInteligenteView';
+import { UsuariosView } from "@/components/views/UsuariosView";
 
 // Modals
 import { DuplicateMergeModal } from '@/components/modals/DuplicateMergeModal';
@@ -178,7 +179,9 @@ function MediFluxAppContent() {
       />
 
       {/* Trial Expiration Notification Banner (Warns when < 2 days) */}
-      <TrialExpirationBanner onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)} />
+      <TrialExpirationBanner
+        onOpenUpgradeModal={() => setIsUpgradeModalOpen(true)}
+      />
 
       {/* Main Content Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -199,22 +202,22 @@ function MediFluxAppContent() {
           {!isPermitted ? (
             <AccessDeniedGuard
               tab={activeTab}
-              reason={isTrialExpiredState ? 'trial_expired' : 'rbac'}
+              reason={isTrialExpiredState ? "trial_expired" : "rbac"}
             />
           ) : (
             <>
-              {activeTab === 'visao_geral' && (
+              {activeTab === "visao_geral" && (
                 <VisaoGeralView
                   onNavigateTab={(t) => setActiveTab(t)}
                   onSelectPatient={(id) => {
                     setSelectedPatientId(id);
-                    setActiveTab('atendimentos');
+                    setActiveTab("atendimentos");
                   }}
                   onOpenNewPatientModal={() => setIsNewPatientModalOpen(true)}
                 />
               )}
 
-              {activeTab === 'atendimentos' && (
+              {activeTab === "atendimentos" && (
                 <AtendimentosView
                   initialPatientId={selectedPatientId}
                   onOpenEditModal={handleOpenEditModal}
@@ -222,34 +225,38 @@ function MediFluxAppContent() {
                 />
               )}
 
-              {activeTab === 'jornadas' && (
+              {activeTab === "jornadas" && (
                 <JornadasView
                   onSelectPatient={(id) => {
                     setSelectedPatientId(id);
-                    setActiveTab('atendimentos');
+                    setActiveTab("atendimentos");
                   }}
                   onOpenNewPatientModal={() => setIsNewPatientModalOpen(true)}
                 />
               )}
 
-              {activeTab === 'pendencias' && (
+              {activeTab === "pendencias" && (
                 <PendenciasView
                   onSelectPatient={(id) => {
                     setSelectedPatientId(id);
-                    setActiveTab('atendimentos');
+                    setActiveTab("atendimentos");
                   }}
                 />
               )}
 
-              {activeTab === 'automacoes' && <AutomacoesView />}
+              {activeTab === "automacoes" && <AutomacoesView />}
 
-              {activeTab === 'indicadores' && <IndicadoresView />}
+              {activeTab === "indicadores" && <IndicadoresView />}
 
-              {activeTab === 'configuracoes' && <ConfiguracoesView />}
+              {activeTab === "configuracoes" && <ConfiguracoesView />}
 
-              {activeTab === 'auditoria_lgpd' && <AuditoriaLGPDView />}
+              {activeTab === "usuarios" && <UsuariosView />}
 
-              {activeTab === 'analise_inteligente' && <AnaliseInteligenteView />}
+              {activeTab === "auditoria_lgpd" && <AuditoriaLGPDView />}
+
+              {activeTab === "analise_inteligente" && (
+                <AnaliseInteligenteView />
+              )}
             </>
           )}
         </main>
@@ -264,7 +271,10 @@ function MediFluxAppContent() {
       />
 
       {/* Profile Modal */}
-      <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
 
       {/* New Patient Modal */}
       <NewPatientModal
@@ -272,7 +282,7 @@ function MediFluxAppContent() {
         onClose={() => setIsNewPatientModalOpen(false)}
         onPatientCreated={(p) => {
           setSelectedPatientId(p.id);
-          setActiveTab('atendimentos');
+          setActiveTab("atendimentos");
         }}
       />
 

@@ -409,6 +409,30 @@ export const apiService = {
     );
   },
 
+  // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.
+  // Rotas novas: antes não existia nenhuma tela dedicada de gestão de
+  // equipe — a lista de usuários só aparecia embutida em
+  // getClinicSettings(), sem nenhuma ação de criar/editar/desativar.
+  // Usuários nunca são excluídos de verdade (ver comentário completo
+  // em routes/users.ts do backend) — "remover" aqui é desativar.
+  async getUsers() {
+    return authFetch<{ users: User[] }>('/api/users');
+  },
+
+  async createUser(payload: { name: string; email: string; role: Role; specialty?: string; crm?: string; password?: string }) {
+    return authFetch<{ user: User; temporaryPassword?: string }>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateUser(payload: { id: string; name?: string; role?: Role; specialty?: string; crm?: string; active?: boolean; newPassword?: string }) {
+    return authFetch<{ user: User }>('/api/users', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
   // 12. Webhooks
   async getWebhooks() {
     return authFetch<{ webhooks: Webhook[]; logs: WebhookLog[] }>('/api/webhooks');

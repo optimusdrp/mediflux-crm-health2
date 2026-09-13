@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   Lock,
+  Users,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -95,6 +96,12 @@ export function Sidebar({
       label: 'Configurações',
       icon: Settings,
       description: '10 áreas de controle e PEP',
+    },
+    {
+      id: 'usuarios',
+      label: 'Usuários',
+      icon: Users,
+      description: 'Gestão de contas e permissões',
     },
     {
       id: 'auditoria_lgpd',

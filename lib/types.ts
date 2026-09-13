@@ -9,6 +9,7 @@ export type TabId =
   | 'automacoes'
   | 'indicadores'
   | 'configuracoes'
+  | 'usuarios'
   | 'auditoria_lgpd'
   | 'analise_inteligente';
 
