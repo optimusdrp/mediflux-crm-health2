@@ -189,6 +189,28 @@ export function AtendimentosView({
    * mensagem quanto pelo nome de quem a enviou.
    */
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+
+  /**
+   * Transcrição de áudio sob demanda — o usuário clica no botão
+   * "Transcrever" no player, chamando o backend (que busca o áudio no
+   * S3 e usa o Gemini). guarda qual mensagem está transcrevendo no
+   * momento, para mostrar o spinner só naquele item específico.
+   */
+  const [transcribingMessageId, setTranscribingMessageId] = useState<string | null>(null);
+  const handleTranscribeAudio = async (messageId: string) => {
+    if (!selectedPatient) return;
+    setTranscribingMessageId(messageId);
+    try {
+      const res = await apiService.transcribeAudioMessage(selectedPatient.id, messageId);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId && m.media ? { ...m, media: { ...m.media, transcription: res.transcription } } : m))
+      );
+    } catch (err: any) {
+      error('Falha ao transcrever áudio', err?.message || 'Tente novamente.');
+    } finally {
+      setTranscribingMessageId(null);
+    }
+  };
   const [messageSearchQuery, setMessageSearchQuery] = useState('');
 
   const activeTriageResult = selectedPatientId ? triageByPatientId[selectedPatientId] || null : null;
@@ -861,7 +883,72 @@ export function AtendimentosView({
                             : 'bg-white text-slate-900 border border-slate-200 rounded-bl-xs'
                         }`}
                       >
-                        <p className="whitespace-pre-wrap">{m.text}</p>
+                        {/* Mídia recebida — áudio, imagem ou documento. mediaError indica
+                            que o WhatsApp confirmou o envio mas o conteúdo não pôde ser
+                            recuperado (falha documentada e conhecida da Evolution API neste
+                            endpoint específico) — a mensagem existe, só sem preview/download. */}
+                        {m.mediaError && (
+                          <div className={`mb-2 p-2 rounded-lg text-[11px] flex items-start gap-1.5 ${isMe ? 'bg-slate-800 text-amber-300' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            <span>{m.mediaError}</span>
+                          </div>
+                        )}
+
+                        {m.media?.type === 'audio' && (
+                          <div className="mb-2 space-y-1.5">
+                            {m.media.url ? (
+                              <audio controls src={m.media.url} className="w-64 max-w-full h-9" />
+                            ) : (
+                              <div className="text-[11px] italic opacity-70">Áudio indisponível.</div>
+                            )}
+                            {m.media.transcription ? (
+                              <div className={`p-2 rounded-lg text-[11px] italic ${isMe ? 'bg-slate-800 text-slate-200' : 'bg-slate-50 text-slate-700 border border-slate-200'}`}>
+                                &ldquo;{m.media.transcription}&rdquo;
+                              </div>
+                            ) : (
+                              m.media.url && (
+                                <button
+                                  onClick={() => handleTranscribeAudio(m.id)}
+                                  disabled={transcribingMessageId === m.id}
+                                  className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+                                    isMe ? 'bg-slate-800 hover:bg-slate-700 text-sky-300' : 'bg-slate-100 hover:bg-slate-200 text-sky-700'
+                                  }`}
+                                >
+                                  <FileText className={`w-3 h-3 ${transcribingMessageId === m.id ? 'animate-pulse' : ''}`} />
+                                  {transcribingMessageId === m.id ? 'Transcrevendo...' : 'Transcrever áudio'}
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
+
+                        {m.media?.type === 'image' && m.media.url && (
+                          <a href={m.media.url} target="_blank" rel="noopener noreferrer" className="block mb-2">
+                            <img src={m.media.url} alt="Imagem recebida" className="max-w-full max-h-64 rounded-lg border border-slate-200 object-contain" />
+                          </a>
+                        )}
+
+                        {m.media?.type === 'document' && m.media.url && (
+                          <a
+                            href={m.media.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={m.media.fileName}
+                            className={`mb-2 flex items-center gap-2 p-2.5 rounded-lg transition-colors ${
+                              isMe ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'
+                            }`}
+                          >
+                            <FileText className={`w-6 h-6 shrink-0 ${isMe ? 'text-sky-300' : 'text-sky-600'}`} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11px] font-semibold truncate">{m.media.fileName}</div>
+                              <div className={`text-[10px] ${isMe ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {(m.media.sizeBytes / 1024).toFixed(0)} KB • Toque para visualizar ou baixar
+                              </div>
+                            </div>
+                          </a>
+                        )}
+
+                        {m.text && <p className="whitespace-pre-wrap">{m.text}</p>}
                         <div
                           className={`text-[10px] mt-1.5 flex items-center justify-end gap-1 ${
                             isMe ? 'text-slate-400' : 'text-slate-400'
