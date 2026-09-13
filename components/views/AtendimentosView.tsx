@@ -109,6 +109,81 @@ export function AtendimentosView({
   };
 
   /**
+   * Checklist de Entrada — antes eram só 3 itens fixos hard-coded no
+   * componente (doc_enviado, convenio_validado, termo_assinado), sem
+   * nenhuma forma de adicionar itens novos. O schema já suportava
+   * chaves livres (Patient.checklist: { [key: string]: boolean }),
+   * só a tela nunca usava isso de verdade.
+   *
+   * Rótulo exibido de cada item: os 3 originais mantêm o texto de
+   * sempre; itens novos guardam o rótulo em CHECKLIST_LABEL_OVERRIDES
+   * assim que criados nesta sessão do navegador (a chave em si já
+   * carrega uma versão normalizada do texto digitado, então mesmo
+   * sem o override o item continua legível ao reabrir a conversa
+   * depois).
+   */
+  const CHECKLIST_KNOWN_LABELS: Record<string, string> = {
+    doc_enviado: 'Documento com Foto (RG/CNH)',
+    convenio_validado: 'Elegibilidade de Convênio',
+    termo_assinado: 'Termo de Consentimento LGPD',
+  };
+  const [checklistLabelOverrides, setChecklistLabelOverrides] = useState<Record<string, string>>({});
+  const getChecklistLabel = (key: string): string =>
+    checklistLabelOverrides[key] || CHECKLIST_KNOWN_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const normalizeChecklistKey = (label: string): string =>
+    label
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove acentos
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '_');
+
+  /**
+   * Catálogo de sugestões por palavra-chave — varre as últimas
+   * mensagens da conversa (do paciente e do atendente) procurando
+   * termos comuns em clínicas de saúde, e sugere o item de checklist
+   * correspondente se ele ainda não estiver na lista do paciente.
+   * Abordagem por palavra-chave, não por IA generativa — mantém o
+   * comportamento previsível e sem custo de chamada de IA extra só
+   * para popular sugestões.
+   */
+  const CHECKLIST_SUGGESTION_RULES: { keywords: string[]; key: string; label: string }[] = [
+    { keywords: ['documento', 'rg', 'cnh', 'identidade'], key: 'doc_enviado', label: 'Documento com Foto (RG/CNH)' },
+    { keywords: ['convênio', 'convenio', 'plano de saúde', 'plano de saude'], key: 'convenio_validado', label: 'Elegibilidade de Convênio' },
+    { keywords: ['termo', 'consentimento', 'lgpd', 'autorização', 'autorizacao'], key: 'termo_assinado', label: 'Termo de Consentimento LGPD' },
+    { keywords: ['exame', 'laudo', 'resultado'], key: 'exame_anexado', label: 'Exame ou Laudo Anexado' },
+    { keywords: ['receita', 'prescrição', 'prescricao', 'medicamento'], key: 'receita_verificada', label: 'Receita Médica Verificada' },
+    { keywords: ['jejum'], key: 'orientacao_jejum', label: 'Orientação de Jejum Confirmada' },
+    { keywords: ['pagamento', 'boleto', 'pix', 'cartão', 'cartao'], key: 'pagamento_confirmado', label: 'Pagamento Confirmado' },
+    { keywords: ['endereço', 'endereco', 'cep'], key: 'endereco_confirmado', label: 'Endereço Confirmado' },
+  ];
+
+  const handleAddChecklistItem = (key: string, label: string) => {
+    setChecklistLabelOverrides((prev) => ({ ...prev, [key]: label }));
+    handleToggleChecklist(key);
+  };
+
+  /**
+   * Busca de itens já utilizados pela clínica — deriva da própria
+   * lista de pacientes já carregada (cada checklist real já é uma
+   * fonte de "itens que esta clínica usa"), sem precisar de uma
+   * entidade nova no backend só para isso.
+   */
+  const [isChecklistSearchOpen, setIsChecklistSearchOpen] = useState(false);
+  const [checklistSearchQuery, setChecklistSearchQuery] = useState('');
+  const [newChecklistItemText, setNewChecklistItemText] = useState('');
+
+  const allKnownChecklistKeys = React.useMemo(() => {
+    const keys = new Set<string>(Object.keys(CHECKLIST_KNOWN_LABELS));
+    for (const p of patients) {
+      Object.keys(p.checklist || {}).forEach((k) => keys.add(k));
+    }
+    return Array.from(keys);
+  }, [patients]);
+
+  /**
    * Busca de mensagens dentro da conversa selecionada — filtra em
    * tempo real conforme o usuário digita, tanto pelo texto da
    * mensagem quanto pelo nome de quem a enviou.
@@ -343,6 +418,27 @@ export function AtendimentosView({
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
+  const suggestedChecklistItems = React.useMemo(() => {
+    if (!selectedPatient) return [];
+    const conversationText = messages
+      .filter((m) => !m.isInternalNote)
+      .slice(-20) // últimas 20 mensagens — suficiente para captar o assunto atual sem reprocessar a conversa inteira
+      .map((m) => m.text.toLowerCase())
+      .join(' ');
+
+    return CHECKLIST_SUGGESTION_RULES.filter(
+      (rule) => selectedPatient.checklist[rule.key] === undefined && rule.keywords.some((kw) => conversationText.includes(kw))
+    );
+  }, [messages, selectedPatient]);
+
+  const filteredChecklistSearchResults = checklistSearchQuery.trim()
+    ? allKnownChecklistKeys.filter(
+        (key) =>
+          getChecklistLabel(key).toLowerCase().includes(checklistSearchQuery.toLowerCase()) &&
+          (!selectedPatient || selectedPatient.checklist[key] === undefined)
+      )
+    : [];
+
   // Fecha a busca de mensagens ao trocar de conversa — o filtro de
   // uma conversa não deveria vazar para a próxima que o usuário abrir.
   useEffect(() => {
@@ -446,7 +542,7 @@ export function AtendimentosView({
   };
 
   // Toggle checklist item
-  const handleToggleChecklist = async (key: 'doc_enviado' | 'convenio_validado' | 'termo_assinado') => {
+  const handleToggleChecklist = async (key: string) => {
     if (!selectedPatient) return;
     const updatedChecklist = {
       ...selectedPatient.checklist,
@@ -984,45 +1080,115 @@ export function AtendimentosView({
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2.5">
               <h5 className="font-bold text-xs text-slate-800 flex items-center justify-between">
                 <span>Checklist de Entrada</span>
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setIsChecklistSearchOpen((prev) => !prev)}
+                    className={`p-1 rounded-md transition-colors ${isChecklistSearchOpen ? 'bg-sky-100 text-sky-700' : 'text-slate-500 hover:bg-white'}`}
+                    title="Buscar item já usado pela clínica"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                  </button>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                </div>
               </h5>
 
+              {/* Itens já marcados/existentes no checklist deste paciente */}
               <div className="space-y-1.5 text-xs text-slate-700">
-                <div
-                  onClick={() => handleToggleChecklist('doc_enviado')}
-                  className="flex items-center gap-2 cursor-pointer hover:text-slate-900"
-                >
-                  {selectedPatient.checklist.doc_enviado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>Documento com Foto (RG/CNH)</span>
-                </div>
+                {Object.keys(selectedPatient.checklist).length === 0 && (
+                  <p className="text-slate-400 italic">Nenhum item adicionado ainda.</p>
+                )}
+                {Object.keys(selectedPatient.checklist).map((key) => (
+                  <div key={key} onClick={() => handleToggleChecklist(key)} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                    {selectedPatient.checklist[key] ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                    <span>{getChecklistLabel(key)}</span>
+                  </div>
+                ))}
+              </div>
 
-                <div
-                  onClick={() => handleToggleChecklist('convenio_validado')}
-                  className="flex items-center gap-2 cursor-pointer hover:text-slate-900"
-                >
-                  {selectedPatient.checklist.convenio_validado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>Elegibilidade de Convênio</span>
+              {/* Sugestões automáticas com base no conteúdo da conversa */}
+              {suggestedChecklistItems.length > 0 && (
+                <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                  <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wide flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Sugerido pela conversa
+                  </span>
+                  {suggestedChecklistItems.map((suggestion) => (
+                    <button
+                      key={suggestion.key}
+                      onClick={() => handleAddChecklistItem(suggestion.key, suggestion.label)}
+                      className="w-full flex items-center gap-2 text-left px-2 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg text-[11px] text-sky-800 font-medium transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" /> {suggestion.label}
+                    </button>
+                  ))}
                 </div>
+              )}
 
-                <div
-                  onClick={() => handleToggleChecklist('termo_assinado')}
-                  className="flex items-center gap-2 cursor-pointer hover:text-slate-900"
-                >
-                  {selectedPatient.checklist.termo_assinado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
+              {/* Busca de itens já utilizados pela clínica em outros atendimentos */}
+              {isChecklistSearchOpen && (
+                <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Buscar item já usado..."
+                    value={checklistSearchQuery}
+                    onChange={(e) => setChecklistSearchQuery(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-[11px] border border-slate-300 rounded-lg bg-white"
+                  />
+                  {checklistSearchQuery.trim() && (
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {filteredChecklistSearchResults.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic px-1">Nenhum item encontrado.</p>
+                      ) : (
+                        filteredChecklistSearchResults.map((key) => (
+                          <button
+                            key={key}
+                            onClick={() => {
+                              handleAddChecklistItem(key, getChecklistLabel(key));
+                              setChecklistSearchQuery('');
+                              setIsChecklistSearchOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2 text-left px-2 py-1.5 hover:bg-white rounded-lg text-[11px] text-slate-700 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5 shrink-0 text-slate-400" /> {getChecklistLabel(key)}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   )}
-                  <span>Termo de Consentimento LGPD</span>
                 </div>
+              )}
+
+              {/* Adicionar item personalizado */}
+              <div className="pt-2 border-t border-slate-200 flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Novo item do checklist..."
+                  value={newChecklistItemText}
+                  onChange={(e) => setNewChecklistItemText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newChecklistItemText.trim()) {
+                      handleAddChecklistItem(normalizeChecklistKey(newChecklistItemText), newChecklistItemText.trim());
+                      setNewChecklistItemText('');
+                    }
+                  }}
+                  className="flex-1 px-2.5 py-1.5 text-[11px] border border-slate-300 rounded-lg"
+                />
+                <button
+                  onClick={() => {
+                    if (!newChecklistItemText.trim()) return;
+                    handleAddChecklistItem(normalizeChecklistKey(newChecklistItemText), newChecklistItemText.trim());
+                    setNewChecklistItemText('');
+                  }}
+                  disabled={!newChecklistItemText.trim()}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg disabled:opacity-40 transition-colors shrink-0"
+                  title="Adicionar item"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
@@ -1246,30 +1412,19 @@ export function AtendimentosView({
 
             {popupCard === 'checklist' && (
               <div className="space-y-1.5 text-xs text-slate-700">
-                <div onClick={() => handleToggleChecklist('doc_enviado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  {selectedPatient.checklist.doc_enviado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>Documento com Foto (RG/CNH)</span>
-                </div>
-                <div onClick={() => handleToggleChecklist('convenio_validado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  {selectedPatient.checklist.convenio_validado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>Elegibilidade de Convênio</span>
-                </div>
-                <div onClick={() => handleToggleChecklist('termo_assinado')} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  {selectedPatient.checklist.termo_assinado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>Termo de Consentimento LGPD</span>
-                </div>
+                {Object.keys(selectedPatient.checklist).length === 0 && (
+                  <p className="text-slate-400 italic">Nenhum item adicionado ainda.</p>
+                )}
+                {Object.keys(selectedPatient.checklist).map((key) => (
+                  <div key={key} onClick={() => handleToggleChecklist(key)} className="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                    {selectedPatient.checklist[key] ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                    <span>{getChecklistLabel(key)}</span>
+                  </div>
+                ))}
               </div>
             )}
 
