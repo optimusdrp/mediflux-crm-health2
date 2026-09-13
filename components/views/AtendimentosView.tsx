@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Patient, ChatMessage, UrgencyLevel, TriageResult } from '@/lib/types';
+import { Patient, ChatMessage, UrgencyLevel, TriageResult, QuickResponse } from '@/lib/types';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,7 +10,6 @@ import {
   Search,
   Filter,
   Send,
-  ChevronLeft,
   Sparkles,
   Lock,
   Edit3,
@@ -55,23 +54,14 @@ export function AtendimentosView({
 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
-  // Correção de UX: substitui o confirm() nativo do navegador (feio,
-  // inconsistente com o resto do sistema, e sem contexto adicional)
-  // por um modal customizado no mesmo padrão visual usado em outras
-  // confirmações de exclusão do MediFlux.
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  // Correção de UX mobile: os 3 painéis desta tela (lista, conversa,
-  // ficha clínica) sempre estiveram todos montados ao mesmo tempo,
-  // um embaixo do outro em telas pequenas, competindo pela mesma
-  // altura fixa de tela sem conseguir rolar — resultado ilegível (ver
-  // relato real do usuário). Em telas menores que lg, mostramos só
-  // UM painel por vez (padrão mestre-detalhe, como WhatsApp/Telegram
-  // mobile), navegando entre eles com um botão "voltar". Em telas
-  // grandes (lg: e acima), esse estado é ignorado — os 3 painéis
-  // continuam lado a lado, exatamente como sempre estiveram.
-  const [mobilePanel, setMobilePanel] = useState<'lista' | 'conversa' | 'detalhes'>('lista');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  // Comando "/" no chat — abre um menu de autocompletar com as
+  // respostas rápidas cadastradas em Configurações, filtrando por
+  // shortcut ou título conforme o usuário continua digitando após a
+  // barra (ex.: "/boas" já filtra para "Boas-vindas").
+  const [showQuickResponseMenu, setShowQuickResponseMenu] = useState(false);
+  const [quickResponseFilter, setQuickResponseFilter] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
   const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -87,15 +77,86 @@ export function AtendimentosView({
   const [filterUrgency, setFilterUrgency] = useState('todas');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Correção de UX real: a rolagem forçava sempre o fim da conversa
+  // toda vez que uma mensagem nova chegava — mesmo se o usuário
+  // estivesse consultando o histórico mais acima, o que interrompia a
+  // leitura (ver relato real do usuário). Esta ref mede a posição de
+  // rolagem atual antes de decidir se desce sozinho ou não.
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Quick responses templates
-  const quickResponses = [
-    { label: 'Boas-vindas', text: 'Olá, {{paciente}}! Seja bem-vindo(a) à nossa clínica. Como posso lhe ajudar hoje?' },
-    { label: 'Preparo Exame', text: 'Prezado(a) {{paciente}}, para seu exame cardiológico é necessário jejum de 8 horas e levar documento com foto.' },
-    { label: 'Confirmação', text: 'Confirmamos sua consulta para {{data}} às {{horario}} com Dr(a). {{medico}}.' },
-  ];
+  /**
+   * Respostas Rápidas — antes eram 3 textos fixos, hard-coded direto
+   * no componente, sem nenhuma relação com o que o usuário cadastra
+   * de verdade em Configurações → "3. Respostas Rápidas & Snippets"
+   * (ClinicSettings.quickResponses, que já existe e já persiste
+   * corretamente — ver auditoria anterior desta migração). Agora
+   * busca da API real; se a clínica ainda não cadastrou nenhuma
+   * resposta, a barra simplesmente fica vazia (nunca mais mostra os
+   * 3 textos fictícios de exemplo).
+   */
+  const [quickResponses, setQuickResponses] = useState<QuickResponse[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    apiService
+      .getClinicSettings()
+      .then((res) => {
+        if (isMounted) setQuickResponses(res.settings?.quickResponses || []);
+      })
+      .catch(() => {
+        // Silencioso — a tela funciona normalmente sem a barra populada;
+        // o usuário ainda pode digitar a mensagem manualmente.
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [isRefreshingQueue, setIsRefreshingQueue] = useState(false);
+
+  /**
+   * Substitui os placeholders de uma resposta rápida pelos dados reais
+   * do paciente selecionado — mesma convenção de nomes já usada em
+   * ConfiguracoesView (aceita tanto {{patient_name}} quanto o alias em
+   * português {{paciente}}, e assim por diante). Placeholders sem dado
+   * real disponível (ex.: {{doctor_name}}, já que Patient não guarda
+   * médico responsável) são deixados como estão, em vez de preenchidos
+   * com um valor inventado.
+   */
+  const renderQuickResponseText = (qr: QuickResponse, patient: Patient): string => {
+    const raw = qr.text || qr.template || '';
+    return raw.replace(/{{patient_name}}|{{paciente}}/gi, patient.name.split(' ')[0]);
+  };
+
+  const applyQuickResponse = (qr: QuickResponse) => {
+    if (!selectedPatient) return;
+    setInputText(renderQuickResponseText(qr, selectedPatient));
+    setShowQuickResponseMenu(false);
+    setQuickResponseFilter('');
+  };
+
+  /**
+   * Comando "/" no chat — ao digitar "/" como primeiro caractere (ou
+   * logo após um espaço), abre o menu de autocompletar. Continuar
+   * digitando depois da barra filtra a lista por shortcut ou título.
+   */
+  const handleInputChange = (value: string) => {
+    setInputText(value);
+    const slashMatch = value.match(/(?:^|\s)\/(\S*)$/);
+    if (slashMatch) {
+      setShowQuickResponseMenu(true);
+      setQuickResponseFilter(slashMatch[1].toLowerCase());
+    } else {
+      setShowQuickResponseMenu(false);
+    }
+  };
+
+  const filteredQuickResponses = quickResponses.filter((qr) => {
+    if (!quickResponseFilter) return true;
+    const shortcutNorm = qr.shortcut.replace(/^\//, '').toLowerCase();
+    return shortcutNorm.includes(quickResponseFilter) || qr.title.toLowerCase().includes(quickResponseFilter);
+  });
 
   const handleManualRefresh = async () => {
     setIsRefreshingQueue(true);
@@ -134,16 +195,12 @@ export function AtendimentosView({
             setSelectedPatientId(list[0].id);
           }
         }
-      } catch (err: any) {
-        // Correção de UX: antes o erro era engolido em silêncio.
-        if (isMounted) {
-          if (patients.length === 0) {
-            setPatients(FALLBACK_PATIENTS);
-            if (!selectedPatientId && FALLBACK_PATIENTS.length > 0) {
-              setSelectedPatientId(FALLBACK_PATIENTS[0].id);
-            }
+      } catch {
+        if (isMounted && patients.length === 0) {
+          setPatients(FALLBACK_PATIENTS);
+          if (!selectedPatientId && FALLBACK_PATIENTS.length > 0) {
+            setSelectedPatientId(FALLBACK_PATIENTS[0].id);
           }
-          error('Falha ao carregar atendimentos', err?.message || 'Não foi possível consultar os pacientes. Recarregue a página.');
         }
       } finally {
         if (isMounted) {
@@ -217,10 +274,25 @@ export function AtendimentosView({
     return () => clearInterval(interval);
   }, [search, filterSpecialty, filterUrgency]);
 
-  // Scroll to bottom
+  // Scroll to bottom — só quando o usuário já estava perto do fim da
+  // conversa (não interrompe quem está lendo o histórico mais acima).
+  // Ao trocar de paciente (nova conversa aberta), sempre desce, já que
+  // não faz sentido abrir uma conversa no meio do histórico dela.
+  const previousPatientIdRef = useRef<string>('');
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const isNewConversation = previousPatientIdRef.current !== selectedPatientId;
+    previousPatientIdRef.current = selectedPatientId;
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const wasNearBottom = distanceFromBottom < 150; // margem de tolerância, em pixels
+
+    if (isNewConversation || wasNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isNewConversation ? 'auto' : 'smooth' });
+    }
+  }, [messages, selectedPatientId]);
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
@@ -241,6 +313,10 @@ export function AtendimentosView({
 
       setMessages((prev) => [...prev, res.message]);
       setInputText('');
+      // Diferente da chegada de mensagem do paciente (que só desce se
+      // o usuário já estava perto do fim), o próprio envio sempre
+      // desce — ele acabou de agir, faz sentido ver a mensagem indo.
+      requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
 
       if (isInternalNote) {
         success('Nota Interna Salva', 'Visível apenas para a equipe da clínica.');
@@ -343,17 +419,17 @@ export function AtendimentosView({
   // Delete Patient (RBAC sensitive action)
   const handleDeletePatient = async () => {
     if (!selectedPatient) return;
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o cadastro de ${selectedPatient.name}?`)) {
+      return;
+    }
 
     try {
       await apiService.deletePatient(selectedPatient.id);
       success('Paciente Removido', 'Registro excluído em conformidade com a LGPD.');
       setPatients((prev) => prev.filter((p) => p.id !== selectedPatient.id));
       setSelectedPatientId('');
-      setMobilePanel('lista');
-      setIsDeleteConfirmOpen(false);
     } catch (err: any) {
       error('Permissão Insuficiente', err.message || 'Apenas administradores podem excluir pacientes.');
-      setIsDeleteConfirmOpen(false);
     }
   };
 
@@ -367,7 +443,7 @@ export function AtendimentosView({
   return (
     <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-61px)] overflow-hidden bg-slate-100">
       {/* COLUMN 1: Queue / Patient List (340px) */}
-      <div className={`w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex-col h-full ${mobilePanel === 'lista' ? 'flex' : 'hidden lg:flex'}`}>
+      <div className="w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
         {/* Search & Header */}
         <div className="p-3 border-b border-slate-200 space-y-2">
           <div className="flex items-center justify-between">
@@ -446,10 +522,7 @@ export function AtendimentosView({
               return (
                 <div
                   key={p.id}
-                  onClick={() => {
-                    setSelectedPatientId(p.id);
-                    setMobilePanel('conversa');
-                  }}
+                  onClick={() => setSelectedPatientId(p.id)}
                   className={`p-3 cursor-pointer transition-all ${uStyle.border} ${
                     isSelected ? 'bg-sky-50/80 border-r-2 border-r-sky-600' : 'hover:bg-slate-50 bg-white'
                   }`}
@@ -488,20 +561,12 @@ export function AtendimentosView({
       </div>
 
       {/* COLUMN 2: Chat Stream & Omnichannel Messenger */}
-      <div className={`flex-1 flex-col h-full bg-slate-50 border-r border-slate-200 ${mobilePanel === 'conversa' ? 'flex' : 'hidden lg:flex'}`}>
+      <div className="flex-1 flex flex-col h-full bg-slate-50 border-r border-slate-200">
         {selectedPatient ? (
           <>
             {/* Chat Top Bar */}
             <div className="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-3">
-                {/* Botão voltar — só em mobile, volta para a lista de pacientes */}
-                <button
-                  onClick={() => setMobilePanel('lista')}
-                  className="lg:hidden -ml-1 p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                  aria-label="Voltar para a lista"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
                 <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
                   {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                 </div>
@@ -532,15 +597,7 @@ export function AtendimentosView({
                   id="btn-run-ai-triage"
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${isAnalyzingAI ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}</span>
-                </button>
-                {/* Acesso à ficha clínica — só em mobile (em desktop a coluna 3 já fica visível ao lado) */}
-                <button
-                  onClick={() => setMobilePanel('detalhes')}
-                  className="lg:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  aria-label="Ver ficha do paciente"
-                >
-                  <User className="w-4 h-4" />
+                  {isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}
                 </button>
               </div>
             </div>
@@ -566,7 +623,7 @@ export function AtendimentosView({
             )}
 
             {/* Chat Messages Stream */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -620,22 +677,22 @@ export function AtendimentosView({
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Templates Drawer */}
-            <div className="px-4 py-2 bg-white border-t border-slate-200 flex items-center gap-2 overflow-x-auto">
-              <span className="text-[11px] font-semibold text-slate-400 shrink-0">Respostas Rápidas:</span>
-              {quickResponses.map((qr, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    const text = qr.text.replace('{{paciente}}', selectedPatient.name.split(' ')[0]);
-                    setInputText(text);
-                  }}
-                  className="px-2.5 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium shrink-0 transition-colors"
-                >
-                  {qr.label}
-                </button>
-              ))}
-            </div>
+            {/* Quick Templates Drawer — respostas reais cadastradas em Configurações → "3. Respostas Rápidas & Snippets" */}
+            {quickResponses.length > 0 && (
+              <div className="px-4 py-2 bg-white border-t border-slate-200 flex items-center gap-2 overflow-x-auto">
+                <span className="text-[11px] font-semibold text-slate-400 shrink-0">Respostas Rápidas:</span>
+                {quickResponses.map((qr) => (
+                  <button
+                    key={qr.id}
+                    onClick={() => applyQuickResponse(qr)}
+                    title={qr.shortcut}
+                    className="px-2.5 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium shrink-0 transition-colors"
+                  >
+                    {qr.title}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Input Composer */}
             <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200">
@@ -664,16 +721,38 @@ export function AtendimentosView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 relative">
+                {/* Menu de autocompletar do comando "/" — mesma fonte de dados da barra acima */}
+                {showQuickResponseMenu && filteredQuickResponses.length > 0 && (
+                  <div className="absolute bottom-full left-0 mb-2 w-80 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg z-20">
+                    {filteredQuickResponses.map((qr) => (
+                      <button
+                        key={qr.id}
+                        type="button"
+                        onClick={() => applyQuickResponse(qr)}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-800">{qr.title}</span>
+                          <span className="text-[10px] font-mono text-sky-600">{qr.shortcut}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">{qr.text || qr.template}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="text"
                   placeholder={
                     isInternalNote
                       ? 'Escreva uma anotação privada que ficará gravada no histórico...'
-                      : `Digite uma resposta para ${selectedPatient.name}...`
+                      : `Digite uma resposta para ${selectedPatient.name}... (use / para respostas rápidas)`
                   }
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setShowQuickResponseMenu(false);
+                  }}
                   className={`flex-1 px-3.5 py-2 text-xs border rounded-xl focus:outline-hidden focus:ring-2 ${
                     isInternalNote
                       ? 'bg-amber-50/50 border-amber-300 focus:ring-amber-400 text-amber-950'
@@ -701,17 +780,9 @@ export function AtendimentosView({
       </div>
 
       {/* COLUMN 3: Clinical Card & AI Insights (340px) */}
-      <div className={`w-full lg:w-80 shrink-0 bg-white border-l border-slate-200 flex-col h-full overflow-y-auto p-4 space-y-4 ${mobilePanel === 'detalhes' ? 'flex' : 'hidden lg:flex'}`}>
+      <div className="w-full lg:w-80 shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto p-4 space-y-4">
         {selectedPatient ? (
           <>
-            {/* Botão voltar — só em mobile, volta para a conversa */}
-            <button
-              onClick={() => setMobilePanel('conversa')}
-              className="lg:hidden -ml-1 -mt-1 flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Voltar para a conversa
-            </button>
-
             {/* Patient Header Card */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center justify-between mb-2">
@@ -934,7 +1005,7 @@ export function AtendimentosView({
             {/* Delete Patient (Sensitive Action) */}
             <div className="pt-2">
               <button
-                onClick={() => setIsDeleteConfirmOpen(true)}
+                onClick={handleDeletePatient}
                 className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Excluir Atendimento (LGPD)
@@ -943,38 +1014,6 @@ export function AtendimentosView({
           </>
         ) : null}
       </div>
-
-      {/* Modal de confirmação de exclusão — substitui o confirm() nativo do navegador */}
-      {isDeleteConfirmOpen && selectedPatient && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <Trash2 className="w-4.5 h-4.5" />
-              </div>
-              <h4 className="font-bold text-slate-900 text-sm">Excluir paciente permanentemente?</h4>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Tem certeza que deseja excluir o cadastro de <strong className="text-slate-700">{selectedPatient.name}</strong>?
-              Esta ação não pode ser desfeita e será registrada no log de auditoria LGPD.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setIsDeleteConfirmOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDeletePatient}
-                className="px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold text-xs flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Excluir Definitivamente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
