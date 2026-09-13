@@ -40,16 +40,17 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
   const [isRestoringTrial, setIsRestoringTrial] = useState(false);
 
   const tabNames: Record<TabId, string> = {
-    landing_page: 'Landing Page (Página Pública)',
-    visao_geral: 'Visão Geral',
-    atendimentos: 'Atendimentos & Chat',
-    jornadas: 'Jornadas & Funis',
-    pendencias: 'Pendências & SLA',
-    automacoes: 'Automações',
-    indicadores: 'Indicadores & Billing',
-    configuracoes: 'Configurações Administrativas',
-    auditoria_lgpd: 'Auditoria LGPD',
-    analise_inteligente: 'IA Dual & Triage Lab',
+    landing_page: "Landing Page (Página Pública)",
+    visao_geral: "Visão Geral",
+    atendimentos: "Atendimentos & Chat",
+    usuarios: "Usuários",
+    jornadas: "Jornadas & Funis",
+    pendencias: "Pendências & SLA",
+    automacoes: "Automações",
+    indicadores: "Indicadores & Billing",
+    configuracoes: "Configurações Administrativas",
+    auditoria_lgpd: "Auditoria LGPD",
+    analise_inteligente: "IA Dual & Triage Lab",
   };
 
   const trialInfo = subscription?.trialInfo;
