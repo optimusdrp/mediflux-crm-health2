@@ -172,6 +172,35 @@ export function AtendimentosView({
    * entidade nova no backend só para isso.
    */
   const [isChecklistSearchOpen, setIsChecklistSearchOpen] = useState(false);
+
+  /**
+   * Edição manual da classificação de Triagem Inicial — a IA sugere
+   * uma urgência (Protocolo Manchester), mas o atendente/profissional
+   * de saúde pode divergir do que a IA identificou e corrigir. Abre
+   * um seletor com as 4 cores do protocolo ao clicar no badge de
+   * urgência; salva direto em Patient.urgency, o mesmo campo usado
+   * em toda a fila e nos indicadores.
+   */
+  const [isEditingUrgency, setIsEditingUrgency] = useState(false);
+  const [isSavingUrgency, setIsSavingUrgency] = useState(false);
+
+  const handleUpdateUrgency = async (newUrgency: UrgencyLevel) => {
+    if (!selectedPatient || newUrgency === selectedPatient.urgency) {
+      setIsEditingUrgency(false);
+      return;
+    }
+    setIsSavingUrgency(true);
+    try {
+      const res = await apiService.updatePatient(selectedPatient.id, { urgency: newUrgency });
+      setPatients((prev) => prev.map((p) => (p.id === res.patient.id ? res.patient : p)));
+      success('Triagem Atualizada', 'A classificação de urgência foi alterada manualmente.');
+    } catch (err: any) {
+      error('Falha ao atualizar triagem', err?.message || 'Tente novamente.');
+    } finally {
+      setIsSavingUrgency(false);
+      setIsEditingUrgency(false);
+    }
+  };
   const [checklistSearchQuery, setChecklistSearchQuery] = useState('');
   const [newChecklistItemText, setNewChecklistItemText] = useState('');
 
@@ -241,12 +270,32 @@ export function AtendimentosView({
    */
   const [quickResponses, setQuickResponses] = useState<QuickResponse[]>([]);
 
+  /**
+   * Filtro de fila por usuário atribuído — o administrador configura
+   * em Configurações se, por padrão, cada usuário vê só as conversas
+   * atribuídas a ele mesmo ou a fila inteira (com opção de filtrar).
+   * Administradores sempre veem tudo, independente da configuração —
+   * a restrição vale só para os demais perfis. Quando a configuração
+   * força "só minhas", o toggle fica travado (sem opção de trocar
+   * para "todas") — é uma política da clínica, não uma preferência
+   * pessoal que o usuário possa contornar.
+   */
+  const [restrictQueueToAssigned, setRestrictQueueToAssigned] = useState(false);
+  const [queueFilterMode, setQueueFilterMode] = useState<'minhas' | 'todas'>('todas');
+  const canToggleQueueFilter = user?.role === 'admin' || !restrictQueueToAssigned;
+
   useEffect(() => {
     let isMounted = true;
     apiService
       .getClinicSettings()
       .then((res) => {
-        if (isMounted) setQuickResponses(res.settings?.quickResponses || []);
+        if (!isMounted) return;
+        setQuickResponses(res.settings?.quickResponses || []);
+        const restrict = res.settings?.queueVisibility?.restrictToAssignedUser || false;
+        setRestrictQueueToAssigned(restrict);
+        // Admin sempre começa vendo "todas"; os demais perfis, se a
+        // clínica restringe por padrão, já começam vendo só "minhas".
+        if (restrict && user?.role !== 'admin') setQueueFilterMode('minhas');
       })
       .catch(() => {
         // Silencioso — a tela funciona normalmente sem a barra populada;
@@ -440,6 +489,13 @@ export function AtendimentosView({
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
+  /**
+   * Lista efetivamente exibida na fila — aplica o filtro "Minhas
+   * conversas" sobre o que já foi carregado do backend (não é uma
+   * nova chamada de API; assignedUserId já vem em cada paciente).
+   */
+  const visiblePatients = queueFilterMode === 'minhas' ? patients.filter((p) => p.assignedUserId === user?.id) : patients;
+
   const suggestedChecklistItems = React.useMemo(() => {
     if (!selectedPatient) return [];
     const conversationText = messages
@@ -466,6 +522,7 @@ export function AtendimentosView({
   useEffect(() => {
     setIsMessageSearchOpen(false);
     setMessageSearchQuery('');
+    setIsEditingUrgency(false);
   }, [selectedPatientId]);
 
   const filteredMessages = messageSearchQuery.trim()
@@ -649,6 +706,19 @@ export function AtendimentosView({
     baixa: { badge: 'bg-emerald-500 text-white', border: 'border-l-4 border-l-emerald-500', dot: 'bg-emerald-500', title: 'Pouco Urgente (Verde)' },
   };
 
+  /**
+   * Emoji de sentimento — classificado automaticamente pela IA na
+   * primeira mensagem de uma conversa nova (ver routes/webhook.ts no
+   * backend). Não é recalculado em mensagens seguintes; reflete o
+   * tom com que o paciente iniciou o contato.
+   */
+  const sentimentEmoji: Record<string, string> = {
+    positivo: '🙂',
+    neutro: '😐',
+    negativo: '😟',
+    urgente: '😰',
+  };
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-61px)] overflow-hidden bg-slate-100">
       {/* COLUMN 1: Queue / Patient List (340px) */}
@@ -715,6 +785,35 @@ export function AtendimentosView({
               <option value="Ortopedia">Ortopedia</option>
             </select>
           </div>
+
+          {/* Filtro de fila por usuário atribuído — travado em "Minhas"
+              quando o administrador configurou restrição por padrão e
+              o usuário atual não é admin (política da clínica, não uma
+              preferência que dá para contornar). */}
+          {canToggleQueueFilter ? (
+            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+              <button
+                onClick={() => setQueueFilterMode('minhas')}
+                className={`py-1 rounded-md font-semibold transition-colors ${
+                  queueFilterMode === 'minhas' ? 'bg-sky-600 text-white' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Minhas Conversas
+              </button>
+              <button
+                onClick={() => setQueueFilterMode('todas')}
+                className={`py-1 rounded-md font-semibold transition-colors ${
+                  queueFilterMode === 'todas' ? 'bg-sky-600 text-white' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Todas
+              </button>
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-400 flex items-center gap-1 px-1">
+              <User className="w-3 h-3" /> Exibindo apenas suas conversas atribuídas
+            </div>
+          )}
         </div>
 
         {/* Patients List Scrollable */}
@@ -724,7 +823,7 @@ export function AtendimentosView({
           ) : patients.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400">Nenhum atendimento localizado.</div>
           ) : (
-            patients.map((p) => {
+            visiblePatients.map((p) => {
               const isSelected = p.id === selectedPatientId;
               const uStyle = urgencyStyles[p.urgency] || urgencyStyles.media;
 
@@ -739,7 +838,12 @@ export function AtendimentosView({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="truncate">
-                      <div className="font-bold text-xs text-slate-900 truncate">{p.name}</div>
+                      <div className="font-bold text-xs text-slate-900 truncate flex items-center gap-1">
+                        {p.name}
+                        {p.sentiment && (
+                          <span title={`Sentimento identificado na primeira mensagem: ${p.sentiment}`}>{sentimentEmoji[p.sentiment]}</span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                         <span className="font-medium text-slate-700">{p.specialty}</span>
                         <span>•</span>
@@ -1310,13 +1414,34 @@ export function AtendimentosView({
 
             {/* AI Insights & Clinical Triage Protocol */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between relative">
                 <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Triagem & Protocolo Clínico
                 </span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs ${urgencyStyles[selectedPatient.urgency]?.badge}`}>
-                  {selectedPatient.urgency.toUpperCase()}
-                </span>
+                <button
+                  onClick={() => setIsEditingUrgency((prev) => !prev)}
+                  disabled={isSavingUrgency}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs transition-opacity hover:opacity-80 disabled:opacity-50 ${urgencyStyles[selectedPatient.urgency]?.badge}`}
+                  title="Clique para editar a classificação de triagem"
+                >
+                  {isSavingUrgency ? 'Salvando...' : selectedPatient.urgency.toUpperCase()}
+                </button>
+                {isEditingUrgency && (
+                  <div className="absolute top-full right-0 mt-1 z-20 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden w-56">
+                    {(['critica', 'alta', 'media', 'baixa'] as UrgencyLevel[]).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => handleUpdateUrgency(level)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] hover:bg-slate-50 transition-colors ${
+                          level === selectedPatient.urgency ? 'bg-slate-50 font-semibold' : ''
+                        }`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${urgencyStyles[level].dot}`} />
+                        {urgencyStyles[level].title}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Protocol & SLA */}

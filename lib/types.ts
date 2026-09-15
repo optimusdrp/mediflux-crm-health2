@@ -1,29 +1,25 @@
 export type Role = 'admin' | 'recepcao' | 'financeiro' | 'terceirizado' | 'medico';
 
-export type TabId =
-  | "landing_page"
-  | "visao_geral"
-  | "atendimentos"
-  | "jornadas"
-  | "pendencias"
-  | "automacoes"
-  | "indicadores"
-  | "configuracoes"
-  | "usuarios"
-  | "conversas_arquivadas"
-  | "auditoria_lgpd"
-  | "analise_inteligente";
+export type TabId = 
+  | 'landing_page'
+  | 'visao_geral'
+  | 'atendimentos'
+  | 'jornadas'
+  | 'pendencias'
+  | 'automacoes'
+  | 'indicadores'
+  | 'configuracoes'
+  | 'auditoria_lgpd'
+  | 'analise_inteligente';
 
 export type SensitiveAction = 
   | 'excluir_paciente'
   | 'unificar_duplicados'
-  | 'visualizar_duplicados'
   | 'exportar_dados_lgpd'
   | 'alterar_permissoes'
   | 'configurar_integracoes_pep'
   | 'gerenciar_cobranca'
   | 'disparar_webhooks_teste'
-  | 'gerenciar_unidades'
   | 'visualizar_prontuario_sensivel';
 
 export type UrgencyLevel = 'critica' | 'alta' | 'media' | 'baixa';
@@ -48,25 +44,6 @@ export interface Clinic {
   phone: string;
   address: string;
   logoUrl?: string;
-  razaoSocial?: string;
-  cnes?: string;
-  rtNome?: string;
-  rtCrm?: string;
-  whatsappAtendimento?: string;
-  emailContato?: string;
-  fusoHorario?: string;
-  horarioFuncionamento?: string;
-}
-
-export interface Unit {
-  id: string;
-  clinicId: string;
-  name: string;
-  address: string;
-  phone: string;
-  horarioFuncionamento?: string;
-  isPrimary: boolean;
-  createdAt: string;
 }
 
 export interface TrialInfo {
@@ -77,7 +54,7 @@ export interface TrialInfo {
   totalDays: number;
   daysRemaining: number;
   hoursRemaining: number;
-  isExpiringSoon: boolean;
+  isExpiringSoon: boolean; // less than 2 days remaining (< 48 hours)
   isExpired: boolean;
   status: 'active' | 'expiring_soon' | 'expired' | 'permanent';
   message?: string;
@@ -100,12 +77,11 @@ export interface Subscription {
   nextBillingAt: string;
   trialEndsAt?: string;
   trialInfo?: TrialInfo;
-  extraUnitsContracted?: number;
 }
 
 export interface UsageRecord {
   clinicId: string;
-  periodKey: string;
+  periodKey: string; // YYYY-MM
   appointmentsCount: number;
   aiCallsCount: number;
   overLimitFee: number;
@@ -118,29 +94,44 @@ export interface Patient {
   phone: string;
   cpf: string;
   birthDate: string;
-  healthInsurance: string;
+  healthInsurance: string; // e.g. "Unimed", "Bradesco Saúde", "Particular"
   planNumber: string;
   specialty: string;
-  funnelStage: string;
+  funnelStage: string; // e.g. "novo", "em_triagem", "aguardando_medico", "agendado", "concluido"
   funnelId: string;
   urgency: UrgencyLevel;
   checklist: { [key: string]: boolean };
   notes: string;
   tags: string[];
   lastInteractionAt: string;
-  conversationStatus?: "active" | "archived";
+  /**
+   * Quem enviou a última mensagem desta conversa — usado para calcular
+   * a contagem real do Sidebar ("Atendimentos": aguardando resposta da
+   * clínica = last message do paciente). Ausente em pacientes criados
+   * antes deste campo existir (tratado como 'attendant' por segurança,
+   * para não contar retroativamente como pendente).
+   */
+  lastMessageSender?: 'patient' | 'attendant';
+  assignedUserId?: string;
+  unreadCount?: number;
+  originChannel: 'whatsapp' | 'telegram' | 'site' | 'instagram' | 'presencial';
+  aiSummary?: string;
+  sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
+  leadScore?: number;
+  requiresHumanReview?: boolean;
+  /**
+   * Status da conversa — 'archived' significa que o atendente
+   * finalizou o atendimento (com um motivo obrigatório, guardado em
+   * archivedReason). Uma conversa arquivada some da fila normal de
+   * Atendimentos e passa a aparecer só em "Conversas Arquivadas". Se
+   * o paciente escrever de novo depois de arquivada, ela reabre
+   * automaticamente e volta para a fila (ver findOrCreatePatientByPhone
+   * no backend) — nunca fica definitivamente fechada por engano.
+   */
+  conversationStatus?: 'active' | 'archived';
   archivedReason?: string;
   archivedAt?: string;
   archivedByUserId?: string;
-  lastMessageSender?: "patient" | "attendant";
-  assignedUserId?: string;
-  unreadCount?: number;
-  originChannel: "whatsapp" | "telegram" | "site" | "instagram" | "presencial";
-  aiSummary?: string;
-  sentiment?: "positivo" | "neutro" | "negativo" | "urgente";
-  leadScore?: number;
-  requiresHumanReview?: boolean;
-  createdAt?: string;
 }
 
 export interface ChatMessage {
@@ -153,6 +144,14 @@ export interface ChatMessage {
   isInternalNote: boolean;
   timestamp: string;
   channel?: 'whatsapp' | 'telegram' | 'site' | 'instagram';
+  /**
+   * Mídia recebida (áudio, imagem ou documento) — o arquivo em si
+   * fica no S3 (bucket privado), aqui só a referência. mediaError
+   * indica que o WhatsApp confirmou o envio de mídia mas o conteúdo
+   * não pôde ser baixado (a Evolution API tem instabilidade
+   * documentada nesse endpoint específico) — nesse caso a mensagem
+   * ainda existe na conversa, só sem preview/download disponível.
+   */
   media?: {
     type: 'audio' | 'image' | 'document';
     s3Key: string;
@@ -160,6 +159,7 @@ export interface ChatMessage {
     fileName: string;
     sizeBytes: number;
     transcription?: string;
+    /** URL temporária (15 min) para preview/download — gerada pelo backend a cada GET /chat/messages, nunca armazenada de forma permanente. */
     url?: string;
   };
   mediaError?: string;
@@ -221,7 +221,7 @@ export interface EHRIntegration {
   rawKey?: string;
   syncDirection: 'bi-directional' | 'inbound' | 'outbound';
   syncFrequency: 'realtime' | '5min' | 'hourly' | 'daily';
-  syncEntities: string[];
+  syncEntities: string[]; // ['patients', 'appointments', 'prescriptions']
   tissConfig?: {
     ansCode: string;
     tussTableVersion: string;
@@ -245,7 +245,7 @@ export interface AuditLog {
   clinicId: string;
   action: string;
   target: string;
-  authorEmail: string;
+  authorEmail: string; // Extracted strictly from JWT
   authorRole: Role;
   ip: string;
   timestamp: string;
@@ -267,7 +267,7 @@ export interface Webhook {
   url: string;
   secret: string;
   active: boolean;
-  events: string[];
+  events: string[]; // e.g. ['patient.created', 'appointment.scheduled', 'triage.critical']
   createdAt: string;
 }
 
@@ -285,7 +285,7 @@ export interface WebhookLog {
 
 export interface QuickResponse {
   id: string;
-  shortcut: string;
+  shortcut: string; // e.g. "/boasvindas"
   title: string;
   text: string;
   template?: string;
@@ -297,7 +297,7 @@ export interface FunnelStage {
   name: string;
   color: string;
   order: number;
-  requiredFields: string[];
+  requiredFields: string[]; // e.g. ['cpf', 'healthInsurance', 'planNumber']
   lockAdvanceWithoutRequiredFields: boolean;
 }
 
@@ -311,6 +311,17 @@ export interface Funnel {
 export interface ClinicSettings {
   clinicId: string;
   quickResponses: QuickResponse[];
+  /**
+   * Controla se, por padrão, cada usuário da equipe vê só as
+   * conversas atribuídas a ele mesmo na fila de Atendimentos, ou se
+   * todos veem a fila inteira com a opção de filtrar. Configurado
+   * pelo administrador em Configurações. Administradores sempre veem
+   * a fila inteira, independente desta configuração — a restrição
+   * vale só para os demais perfis.
+   */
+  queueVisibility?: {
+    restrictToAssignedUser: boolean;
+  };
   draftsPolicy: {
     autoSaveSeconds: number;
     offlineCacheRetentionDays: number;
@@ -378,7 +389,7 @@ export interface AutoTagResult {
 }
 
 export interface LeadQualificationResult {
-  score: number;
+  score: number; // 0-100
   qualificationLevel: 'Quente' | 'Morno' | 'Frio';
   commercialInterest: string;
   preferredDatesSuggested: string[];
@@ -388,7 +399,7 @@ export interface LeadQualificationResult {
 
 export interface SentimentAnalysisResult {
   sentiment: 'positivo' | 'neutro' | 'negativo' | 'urgente';
-  score: number;
+  score: number; // -1.0 to 1.0
   emotionalState: string;
   frustrationIndicators: string[];
   recommendedTone: string;
@@ -399,5 +410,5 @@ export interface DuplicateMatch {
   primaryPatient: Patient;
   duplicateCandidate: Patient;
   matchReason: 'cpf_exato' | 'telefone_exato' | 'nome_similar' | 'multiplos_fatores';
-  confidenceScore: number;
+  confidenceScore: number; // 0 - 100
 }

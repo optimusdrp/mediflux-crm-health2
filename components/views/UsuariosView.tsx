@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Search,
   KeyRound,
+  Lock,
 } from 'lucide-react';
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -69,6 +70,46 @@ export function UsuariosView() {
 
   const [pendingToggle, setPendingToggle] = useState<User | null>(null);
 
+  /**
+   * Configuração de visibilidade da fila de Atendimentos — o admin
+   * decide se, por padrão, cada usuário vê só as conversas atribuídas
+   * a ele mesmo ou a fila inteira (com opção de filtrar). Persistida
+   * em ClinicSettings.queueVisibility; administradores sempre veem
+   * tudo, a restrição vale só para os demais perfis.
+   */
+  const [restrictQueueToAssigned, setRestrictQueueToAssigned] = useState(false);
+  const [isLoadingQueueConfig, setIsLoadingQueueConfig] = useState(true);
+  const [isSavingQueueConfig, setIsSavingQueueConfig] = useState(false);
+
+  const fetchQueueConfig = async () => {
+    setIsLoadingQueueConfig(true);
+    try {
+      const res = await apiService.getClinicSettings();
+      setRestrictQueueToAssigned(res.settings?.queueVisibility?.restrictToAssignedUser || false);
+    } catch {
+      // Silencioso — a tela funciona normalmente com o padrão (fila inteira visível).
+    } finally {
+      setIsLoadingQueueConfig(false);
+    }
+  };
+
+  const handleToggleQueueRestriction = async () => {
+    const next = !restrictQueueToAssigned;
+    setIsSavingQueueConfig(true);
+    try {
+      await apiService.saveClinicSettings({ queueVisibility: { restrictToAssignedUser: next } });
+      setRestrictQueueToAssigned(next);
+      success(
+        'Configuração Salva',
+        next ? 'Cada usuário agora vê apenas as conversas atribuídas a ele.' : 'A equipe agora vê a fila completa de Atendimentos, com opção de filtrar.'
+      );
+    } catch (err: any) {
+      error('Falha ao salvar configuração', err?.message || 'Tente novamente.');
+    } finally {
+      setIsSavingQueueConfig(false);
+    }
+  };
+
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
@@ -83,6 +124,7 @@ export function UsuariosView() {
 
   useEffect(() => {
     fetchUsers();
+    fetchQueueConfig();
   }, []);
 
   const filteredUsers = users.filter((u) => {
@@ -193,6 +235,35 @@ export function UsuariosView() {
           <UserPlus className="w-3.5 h-3.5" /> Novo Usuário
         </button>
       </div>
+
+      {/* Visibilidade da Fila de Atendimentos — política da clínica */}
+      {!isLoadingQueueConfig && (
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-slate-400" /> Visibilidade da Fila de Atendimentos
+            </span>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {restrictQueueToAssigned
+                ? 'Cada usuário vê apenas as conversas atribuídas a ele. Administradores sempre veem a fila inteira.'
+                : 'Toda a equipe vê a fila completa de Atendimentos, com opção de filtrar por "Minhas Conversas".'}
+            </p>
+          </div>
+          <button
+            onClick={handleToggleQueueRestriction}
+            disabled={isSavingQueueConfig}
+            className={`shrink-0 relative w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${
+              restrictQueueToAssigned ? 'bg-sky-600' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${
+                restrictQueueToAssigned ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-2.5">
