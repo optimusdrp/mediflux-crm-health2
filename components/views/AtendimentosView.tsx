@@ -39,6 +39,8 @@ import {
   ChevronsRight,
   ChevronsLeft,
   X,
+  Eye,
+  Download,
 } from 'lucide-react';
 
 interface AtendimentosViewProps {
@@ -218,6 +220,54 @@ export function AtendimentosView({
    * mensagem quanto pelo nome de quem a enviou.
    */
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+
+  /**
+   * Pré-visualização de documentos — PDF renderiza direto no
+   * navegador (iframe nativo, nunca sai do MediFlux). .txt/.csv
+   * buscam o conteúdo via fetch e mostram como texto puro (idem,
+   * fica só entre o navegador e o S3). .doc/.docx/.xls exigem o
+   * Microsoft Office Online Viewer — não há visualizador nativo de
+   * navegador para esses formatos — que precisa enviar o arquivo aos
+   * servidores da Microsoft para renderizar. Como o documento pode
+   * ser dado sensível de saúde (exame, receita), isso só acontece
+   * depois de o usuário confirmar explicitamente que aceita — nunca
+   * automático ao abrir o preview.
+   */
+  type DocPreviewKind = 'pdf' | 'text' | 'office' | 'image' | 'unsupported';
+  const [previewDoc, setPreviewDoc] = useState<{ fileName: string; url: string; kind: DocPreviewKind } | null>(null);
+  const [officeViewerConsented, setOfficeViewerConsented] = useState(false);
+  const [textPreviewContent, setTextPreviewContent] = useState<string | null>(null);
+  const [isLoadingTextPreview, setIsLoadingTextPreview] = useState(false);
+
+  const getDocPreviewKind = (fileName: string): DocPreviewKind => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf') return 'pdf';
+    if (ext === 'txt' || ext === 'csv') return 'text';
+    if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) return 'office';
+    return 'unsupported';
+  };
+
+  const handleOpenDocPreview = async (fileName: string, url: string) => {
+    const kind = getDocPreviewKind(fileName);
+    setPreviewDoc({ fileName, url, kind });
+    setOfficeViewerConsented(false);
+    setTextPreviewContent(null);
+    if (kind === 'text') {
+      setIsLoadingTextPreview(true);
+      try {
+        const res = await fetch(url);
+        const content = await res.text();
+        // Limite de exibição — documentos de texto muito longos ficam
+        // pesados para renderizar inline; o usuário sempre pode baixar
+        // o arquivo completo pelo botão de download.
+        setTextPreviewContent(content.length > 20000 ? content.slice(0, 20000) + '\n\n[... arquivo truncado, baixe para ver o conteúdo completo ...]' : content);
+      } catch {
+        setTextPreviewContent('Não foi possível carregar o conteúdo deste arquivo para pré-visualização.');
+      } finally {
+        setIsLoadingTextPreview(false);
+      }
+    }
+  };
 
   /**
    * Transcrição de áudio sob demanda — o usuário clica no botão
@@ -1056,29 +1106,68 @@ export function AtendimentosView({
                         )}
 
                         {m.media?.type === 'image' && m.media.url && (
-                          <a href={m.media.url} target="_blank" rel="noopener noreferrer" className="block mb-2">
-                            <img src={m.media.url} alt="Imagem recebida" className="max-w-full max-h-64 rounded-lg border border-slate-200 object-contain" />
-                          </a>
+                          <div className="mb-2 space-y-1.5">
+                            <img
+                              src={m.media.url}
+                              alt="Imagem recebida"
+                              onClick={() => setPreviewDoc({ fileName: m.media!.fileName, url: m.media!.url!, kind: 'image' })}
+                              className="max-w-full max-h-64 rounded-lg border border-slate-200 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setPreviewDoc({ fileName: m.media!.fileName, url: m.media!.url!, kind: 'image' })}
+                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                  isMe ? 'bg-slate-800 hover:bg-slate-700 text-sky-300' : 'bg-slate-100 hover:bg-slate-200 text-sky-700'
+                                }`}
+                              >
+                                <Eye className="w-3 h-3" /> Ampliar
+                              </button>
+                              <a
+                                href={m.media.url}
+                                download={m.media.fileName}
+                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                  isMe ? 'bg-slate-800 hover:bg-slate-700 text-sky-300' : 'bg-slate-100 hover:bg-slate-200 text-sky-700'
+                                }`}
+                              >
+                                <Download className="w-3 h-3" /> Baixar
+                              </a>
+                            </div>
+                          </div>
                         )}
 
                         {m.media?.type === 'document' && m.media.url && (
-                          <a
-                            href={m.media.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={m.media.fileName}
-                            className={`mb-2 flex items-center gap-2 p-2.5 rounded-lg transition-colors ${
-                              isMe ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'
-                            }`}
-                          >
-                            <FileText className={`w-6 h-6 shrink-0 ${isMe ? 'text-sky-300' : 'text-sky-600'}`} />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[11px] font-semibold truncate">{m.media.fileName}</div>
-                              <div className={`text-[10px] ${isMe ? 'text-slate-400' : 'text-slate-500'}`}>
-                                {(m.media.sizeBytes / 1024).toFixed(0)} KB • Toque para visualizar ou baixar
+                          <div className="mb-2 space-y-1.5">
+                            <div
+                              className={`flex items-center gap-2 p-2.5 rounded-lg ${
+                                isMe ? 'bg-slate-800' : 'bg-slate-50 border border-slate-200'
+                              }`}
+                            >
+                              <FileText className={`w-6 h-6 shrink-0 ${isMe ? 'text-sky-300' : 'text-sky-600'}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11px] font-semibold truncate">{m.media.fileName}</div>
+                                <div className={`text-[10px] ${isMe ? 'text-slate-400' : 'text-slate-500'}`}>{(m.media.sizeBytes / 1024).toFixed(0)} KB</div>
                               </div>
                             </div>
-                          </a>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleOpenDocPreview(m.media!.fileName, m.media!.url!)}
+                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                  isMe ? 'bg-slate-800 hover:bg-slate-700 text-sky-300' : 'bg-slate-100 hover:bg-slate-200 text-sky-700'
+                                }`}
+                              >
+                                <Eye className="w-3 h-3" /> Visualizar
+                              </button>
+                              <a
+                                href={m.media.url}
+                                download={m.media.fileName}
+                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                  isMe ? 'bg-slate-800 hover:bg-slate-700 text-sky-300' : 'bg-slate-100 hover:bg-slate-200 text-sky-700'
+                                }`}
+                              >
+                                <Download className="w-3 h-3" /> Baixar
+                              </a>
+                            </div>
+                          </div>
                         )}
 
                         {m.text && <p className="whitespace-pre-wrap">{m.text}</p>}
@@ -1632,6 +1721,87 @@ export function AtendimentosView({
               >
                 {isArchiving ? 'Finalizando...' : 'Finalizar Conversa'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de pré-visualização de documento/imagem */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-4" onClick={() => setPreviewDoc(null)}>
+          <div
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <span className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
+                <FileText className="w-4 h-4 text-sky-600 shrink-0" /> {previewDoc.fileName}
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <a
+                  href={previewDoc.url}
+                  download={previewDoc.fileName}
+                  className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </a>
+                <button onClick={() => setPreviewDoc(null)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto bg-slate-50 min-h-[300px]">
+              {previewDoc.kind === 'image' && (
+                <img src={previewDoc.url} alt={previewDoc.fileName} className="max-w-full max-h-[75vh] mx-auto object-contain" />
+              )}
+
+              {previewDoc.kind === 'pdf' && <iframe src={previewDoc.url} className="w-full h-[75vh] border-0" title={previewDoc.fileName} />}
+
+              {previewDoc.kind === 'text' && (
+                <div className="p-4">
+                  {isLoadingTextPreview ? (
+                    <div className="text-center py-10 text-slate-400 text-xs">Carregando conteúdo...</div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-800 bg-white p-4 rounded-lg border border-slate-200">
+                      {textPreviewContent}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {previewDoc.kind === 'office' && !officeViewerConsented && (
+                <div className="p-6 flex flex-col items-center text-center gap-3 max-w-md mx-auto py-16">
+                  <FileText className="w-10 h-10 text-slate-300" />
+                  <p className="text-xs text-slate-600">
+                    Este formato (.doc, .docx, .xls) não tem visualizador nativo no navegador. A pré-visualização usa o Microsoft Office Online Viewer,
+                    que precisa enviar uma cópia temporária deste arquivo aos servidores da Microsoft para renderizá-lo.
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Como este documento pode conter dado sensível de saúde, confirme que deseja continuar — ou baixe o arquivo para abrir localmente.
+                  </p>
+                  <button
+                    onClick={() => setOfficeViewerConsented(true)}
+                    className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Entendi, visualizar mesmo assim
+                  </button>
+                </div>
+              )}
+
+              {previewDoc.kind === 'office' && officeViewerConsented && (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewDoc.url)}`}
+                  className="w-full h-[75vh] border-0"
+                  title={previewDoc.fileName}
+                />
+              )}
+
+              {previewDoc.kind === 'unsupported' && (
+                <div className="p-10 text-center text-slate-400 text-xs">
+                  Não há pré-visualização disponível para este tipo de arquivo. Use o botão &ldquo;Baixar&rdquo; para abri-lo localmente.
+                </div>
+              )}
             </div>
           </div>
         </div>
