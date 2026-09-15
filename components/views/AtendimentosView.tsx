@@ -1337,7 +1337,9 @@ export function AtendimentosView({
       <div
         className={`${isMobileClinicalPanelOpen ? 'flex' : 'hidden lg:flex'} ${
           isClinicalColumnCollapsed ? 'w-full lg:w-16' : 'w-full lg:w-80'
-        } fixed lg:static inset-0 lg:inset-auto z-40 lg:z-auto shrink-0 bg-white border-l border-slate-200 flex-col h-full overflow-y-auto transition-[width] duration-200`}
+        } fixed lg:static inset-0 lg:inset-auto z-40 lg:z-auto shrink-0 bg-white border-l border-slate-200 flex-col h-full transition-[width] duration-200 ${
+          isClinicalColumnCollapsed ? 'overflow-visible' : 'overflow-y-auto'
+        }`}
       >
         {/* Botão de voltar ao chat — só em telas pequenas, onde o painel vira tela cheia */}
         <button
@@ -1375,7 +1377,7 @@ export function AtendimentosView({
                       <card.icon className={`w-4 h-4 ${card.color}`} />
                     </button>
                     {tooltipCard === card.id && (
-                      <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-50 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
+                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-[60] px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-semibold rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
                         {card.label}
                       </div>
                     )}
