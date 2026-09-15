@@ -15,9 +15,10 @@ import {
   Sparkles,
   Lock,
   Users,
-  ChevronsLeft,
+  Archive,
   ChevronsRight,
-} from 'lucide-react';
+  ChevronsLeft,
+} from "lucide-react";
 
 interface SidebarProps {
   activeTab: TabId;
