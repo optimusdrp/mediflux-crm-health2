@@ -58,14 +58,6 @@ export interface Clinic {
   horarioFuncionamento?: string;
 }
 
-/**
- * Unidade de atendimento — endereço físico distinto da clínica.
- * Toda clínica tem 1 unidade incluída no plano (isPrimary: true,
- * nunca excluível); unidades extras são contratadas à parte, com
- * valor mensal adicional. Faltava esta interface em types.ts —
- * causa real da falha de build (Header.tsx e api.ts já importavam
- * Unit daqui, mas o tipo nunca tinha sido adicionado neste arquivo).
- */
 export interface Unit {
   id: string;
   clinicId: string;
@@ -85,7 +77,7 @@ export interface TrialInfo {
   totalDays: number;
   daysRemaining: number;
   hoursRemaining: number;
-  isExpiringSoon: boolean; // less than 2 days remaining (< 48 hours)
+  isExpiringSoon: boolean;
   isExpired: boolean;
   status: 'active' | 'expiring_soon' | 'expired' | 'permanent';
   message?: string;
@@ -108,13 +100,12 @@ export interface Subscription {
   nextBillingAt: string;
   trialEndsAt?: string;
   trialInfo?: TrialInfo;
-  /** Quantidade de unidades extras contratadas, além da 1 unidade incluída no plano base. */
   extraUnitsContracted?: number;
 }
 
 export interface UsageRecord {
   clinicId: string;
-  periodKey: string; // YYYY-MM
+  periodKey: string;
   appointmentsCount: number;
   aiCallsCount: number;
   overLimitFee: number;
@@ -127,10 +118,10 @@ export interface Patient {
   phone: string;
   cpf: string;
   birthDate: string;
-  healthInsurance: string; // e.g. "Unimed", "Bradesco Saúde", "Particular"
+  healthInsurance: string;
   planNumber: string;
   specialty: string;
-  funnelStage: string; // e.g. "novo", "em_triagem", "aguardando_medico", "agendado", "concluido"
+  funnelStage: string;
   funnelId: string;
   urgency: UrgencyLevel;
   checklist: { [key: string]: boolean };
@@ -141,13 +132,6 @@ export interface Patient {
   archivedReason?: string;
   archivedAt?: string;
   archivedByUserId?: string;
-  /**
-   * Quem enviou a última mensagem desta conversa — usado para calcular
-   * a contagem real do Sidebar ("Atendimentos": aguardando resposta da
-   * clínica = last message do paciente). Ausente em pacientes criados
-   * antes deste campo existir (tratado como 'attendant' por segurança,
-   * para não contar retroativamente como pendente).
-   */
   lastMessageSender?: "patient" | "attendant";
   assignedUserId?: string;
   unreadCount?: number;
@@ -156,7 +140,6 @@ export interface Patient {
   sentiment?: "positivo" | "neutro" | "negativo" | "urgente";
   leadScore?: number;
   requiresHumanReview?: boolean;
-  /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */
   createdAt?: string;
 }
 
@@ -170,6 +153,16 @@ export interface ChatMessage {
   isInternalNote: boolean;
   timestamp: string;
   channel?: 'whatsapp' | 'telegram' | 'site' | 'instagram';
+  media?: {
+    type: 'audio' | 'image' | 'document';
+    s3Key: string;
+    mimetype: string;
+    fileName: string;
+    sizeBytes: number;
+    transcription?: string;
+    url?: string;
+  };
+  mediaError?: string;
   aiAnalysis?: {
     urgency?: UrgencyLevel;
     tags?: string[];
@@ -228,7 +221,7 @@ export interface EHRIntegration {
   rawKey?: string;
   syncDirection: 'bi-directional' | 'inbound' | 'outbound';
   syncFrequency: 'realtime' | '5min' | 'hourly' | 'daily';
-  syncEntities: string[]; // ['patients', 'appointments', 'prescriptions']
+  syncEntities: string[];
   tissConfig?: {
     ansCode: string;
     tussTableVersion: string;
@@ -252,7 +245,7 @@ export interface AuditLog {
   clinicId: string;
   action: string;
   target: string;
-  authorEmail: string; // Extracted strictly from JWT
+  authorEmail: string;
   authorRole: Role;
   ip: string;
   timestamp: string;
@@ -274,7 +267,7 @@ export interface Webhook {
   url: string;
   secret: string;
   active: boolean;
-  events: string[]; // e.g. ['patient.created', 'appointment.scheduled', 'triage.critical']
+  events: string[];
   createdAt: string;
 }
 
@@ -292,7 +285,7 @@ export interface WebhookLog {
 
 export interface QuickResponse {
   id: string;
-  shortcut: string; // e.g. "/boasvindas"
+  shortcut: string;
   title: string;
   text: string;
   template?: string;
@@ -304,7 +297,7 @@ export interface FunnelStage {
   name: string;
   color: string;
   order: number;
-  requiredFields: string[]; // e.g. ['cpf', 'healthInsurance', 'planNumber']
+  requiredFields: string[];
   lockAdvanceWithoutRequiredFields: boolean;
 }
 
@@ -385,7 +378,7 @@ export interface AutoTagResult {
 }
 
 export interface LeadQualificationResult {
-  score: number; // 0-100
+  score: number;
   qualificationLevel: 'Quente' | 'Morno' | 'Frio';
   commercialInterest: string;
   preferredDatesSuggested: string[];
@@ -395,7 +388,7 @@ export interface LeadQualificationResult {
 
 export interface SentimentAnalysisResult {
   sentiment: 'positivo' | 'neutro' | 'negativo' | 'urgente';
-  score: number; // -1.0 to 1.0
+  score: number;
   emotionalState: string;
   frustrationIndicators: string[];
   recommendedTone: string;
@@ -406,5 +399,5 @@ export interface DuplicateMatch {
   primaryPatient: Patient;
   duplicateCandidate: Patient;
   matchReason: 'cpf_exato' | 'telefone_exato' | 'nome_similar' | 'multiplos_fatores';
-  confidenceScore: number; // 0 - 100
+  confidenceScore: number;
 }
