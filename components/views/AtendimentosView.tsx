@@ -59,6 +59,13 @@ export function AtendimentosView({
 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  // Distingue "a tela ainda não selecionou ninguém" (deve auto-selecionar
+  // o primeiro da fila) de "o usuário voltou à fila de propósito" (não
+  // deve reselecionar sozinho — botão "Voltar à fila" em telas pequenas).
+  // Sem isso, o useEffect de busca de pacientes reagia à própria mudança
+  // de selectedPatientId para '' e selecionava o primeiro de novo,
+  // criando um loop que impedia voltar à lista.
+  const hasEverSelectedRef = useRef(!!initialPatientId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   // Comando "/" no chat — abre um menu de autocompletar com as
@@ -440,14 +447,16 @@ export function AtendimentosView({
         if (isMounted) {
           const list = res.patients && res.patients.length > 0 ? res.patients : FALLBACK_PATIENTS;
           setPatients(list);
-          if (!selectedPatientId && list.length > 0) {
+          if (!hasEverSelectedRef.current && list.length > 0) {
+            hasEverSelectedRef.current = true;
             setSelectedPatientId(list[0].id);
           }
         }
       } catch {
         if (isMounted && patients.length === 0) {
           setPatients(FALLBACK_PATIENTS);
-          if (!selectedPatientId && FALLBACK_PATIENTS.length > 0) {
+          if (!hasEverSelectedRef.current && FALLBACK_PATIENTS.length > 0) {
+            hasEverSelectedRef.current = true;
             setSelectedPatientId(FALLBACK_PATIENTS[0].id);
           }
         }
@@ -462,7 +471,7 @@ export function AtendimentosView({
     return () => {
       isMounted = false;
     };
-  }, [search, filterSpecialty, filterUrgency, selectedPatientId, patients.length]);
+  }, [search, filterSpecialty, filterUrgency, patients.length]);
 
   const [prevInitialId, setPrevInitialId] = useState<string | undefined>(initialPatientId);
   if (initialPatientId && initialPatientId !== prevInitialId) {
@@ -904,7 +913,10 @@ export function AtendimentosView({
               return (
                 <div
                   key={p.id}
-                  onClick={() => setSelectedPatientId(p.id)}
+                  onClick={() => {
+                    hasEverSelectedRef.current = true;
+                    setSelectedPatientId(p.id);
+                  }}
                   className={`p-3 cursor-pointer transition-all ${uStyle.border} ${
                     isSelected ? 'bg-sky-50/80 border-r-2 border-r-sky-600' : 'hover:bg-slate-50 bg-white'
                   }`}
@@ -953,66 +965,66 @@ export function AtendimentosView({
       <div className={`${selectedPatientId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full bg-slate-50 border-r border-slate-200`}>
         {selectedPatient ? (
           <>
-            {/* Chat Top Bar */}
-            <div className="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-3 min-w-0">
-                {/* Voltar à fila — só em telas pequenas, onde a Coluna 1 ficou oculta */}
-                <button
-                  onClick={() => setSelectedPatientId('')}
-                  className="lg:hidden shrink-0 p-1.5 -ml-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                  title="Voltar à fila de Atendimentos"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </button>
-                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-xs text-slate-900 truncate">{selectedPatient.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 capitalize shrink-0">
-                      {selectedPatient.originChannel}
-                    </span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${urgencyStyles[selectedPatient.urgency]?.badge || 'bg-slate-200 text-slate-700'}`}>
-                      {selectedPatient.urgency}
-                    </span>
+            {/* Chat Top Bar — em duas linhas em telas pequenas (nome+ações / detalhes),
+                evitando que tudo se espreme numa linha só e sobreponha. */}
+            <div className="bg-white border-b border-slate-200 shadow-2xs">
+              <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {/* Voltar à fila — só em telas pequenas, onde a Coluna 1 ficou oculta */}
+                  <button
+                    onClick={() => setSelectedPatientId('')}
+                    className="lg:hidden shrink-0 p-1.5 -ml-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                    title="Voltar à fila de Atendimentos"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </button>
+                  <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                   </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                    <span>{selectedPatient.phone}</span>
-                    <span>•</span>
-                    <span>CPF: {selectedPatient.cpf || 'Não informado'}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="font-bold text-xs text-slate-900 truncate">{selectedPatient.name}</h3>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${urgencyStyles[selectedPatient.urgency]?.badge || 'bg-slate-200 text-slate-700'}`}>
+                        {selectedPatient.urgency}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">
+                      <span className="capitalize">{selectedPatient.originChannel}</span>
+                      <span>•</span>
+                      <span className="truncate">{selectedPatient.phone}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* AI Trigger Action */}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Abrir painel clínico — só em telas pequenas, onde ele fica oculto por padrão */}
-                <button
-                  onClick={() => setIsMobileClinicalPanelOpen(true)}
-                  className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
-                  title="Abrir ficha clínica"
-                >
-                  <User className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setIsMessageSearchOpen((prev) => !prev)}
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    isMessageSearchOpen ? 'bg-sky-100 text-sky-700' : 'text-slate-500 hover:bg-slate-100'
-                  }`}
-                  title="Buscar mensagens nesta conversa"
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleRunAITriage}
-                  disabled={isAnalyzingAI}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50"
-                  id="btn-run-ai-triage"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${isAnalyzingAI ? 'animate-spin' : ''}`} />
-                  {isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}
-                </button>
+                {/* Ações — em telas pequenas, o botão de triagem vira só ícone para caber */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setIsMobileClinicalPanelOpen(true)}
+                    className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+                    title="Abrir ficha clínica"
+                  >
+                    <User className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsMessageSearchOpen((prev) => !prev)}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      isMessageSearchOpen ? 'bg-sky-100 text-sky-700' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                    title="Buscar mensagens nesta conversa"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleRunAITriage}
+                    disabled={isAnalyzingAI}
+                    className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50"
+                    id="btn-run-ai-triage"
+                    title="Triagem Manchester IA"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isAnalyzingAI ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">{isAnalyzingAI ? 'Classificando Histórico...' : 'Triagem Manchester IA'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
