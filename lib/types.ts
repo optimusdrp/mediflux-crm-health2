@@ -1,17 +1,18 @@
 export type Role = 'admin' | 'recepcao' | 'financeiro' | 'terceirizado' | 'medico';
 
-export type TabId = 
-  | 'landing_page'
-  | 'visao_geral'
-  | 'atendimentos'
-  | 'jornadas'
-  | 'pendencias'
-  | 'automacoes'
-  | 'indicadores'
-  | 'configuracoes'
-  | 'usuarios'
-  | 'auditoria_lgpd'
-  | 'analise_inteligente';
+export type TabId =
+  | "landing_page"
+  | "visao_geral"
+  | "atendimentos"
+  | "jornadas"
+  | "pendencias"
+  | "automacoes"
+  | "indicadores"
+  | "configuracoes"
+  | "usuarios"
+  | "conversas_arquivadas"
+  | "auditoria_lgpd"
+  | "analise_inteligente";
 
 export type SensitiveAction = 
   | 'excluir_paciente'
@@ -136,6 +137,10 @@ export interface Patient {
   notes: string;
   tags: string[];
   lastInteractionAt: string;
+  conversationStatus?: "active" | "archived";
+  archivedReason?: string;
+  archivedAt?: string;
+  archivedByUserId?: string;
   /**
    * Quem enviou a última mensagem desta conversa — usado para calcular
    * a contagem real do Sidebar ("Atendimentos": aguardando resposta da
@@ -143,12 +148,12 @@ export interface Patient {
    * antes deste campo existir (tratado como 'attendant' por segurança,
    * para não contar retroativamente como pendente).
    */
-  lastMessageSender?: 'patient' | 'attendant';
+  lastMessageSender?: "patient" | "attendant";
   assignedUserId?: string;
   unreadCount?: number;
-  originChannel: 'whatsapp' | 'telegram' | 'site' | 'instagram' | 'presencial';
+  originChannel: "whatsapp" | "telegram" | "site" | "instagram" | "presencial";
   aiSummary?: string;
-  sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
+  sentiment?: "positivo" | "neutro" | "negativo" | "urgente";
   leadScore?: number;
   requiresHumanReview?: boolean;
   /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */

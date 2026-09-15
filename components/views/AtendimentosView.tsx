@@ -613,6 +613,35 @@ export function AtendimentosView({
     }
   };
 
+  /**
+   * Finalizar Conversa — exige um motivo (não é opcional: é a base do
+   * relatório de motivos de encerramento). Ao confirmar, a conversa
+   * sai da fila de Atendimentos e passa a aparecer só em Conversas
+   * Arquivadas. Se o paciente escrever de novo depois, a conversa
+   * reabre automaticamente e volta para a fila — isso acontece no
+   * backend, não precisa de nada aqui no front-end.
+   */
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const handleArchiveConversation = async () => {
+    if (!selectedPatient || !archiveReason.trim()) return;
+    setIsArchiving(true);
+    try {
+      await apiService.archivePatientConversation(selectedPatient.id, archiveReason.trim());
+      success('Conversa Finalizada', `O atendimento de ${selectedPatient.name} foi arquivado.`);
+      setPatients((prev) => prev.filter((p) => p.id !== selectedPatient.id));
+      setSelectedPatientId('');
+      setIsArchiveModalOpen(false);
+      setArchiveReason('');
+    } catch (err: any) {
+      error('Falha ao finalizar conversa', err?.message || 'Tente novamente.');
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
   const urgencyStyles: Record<UrgencyLevel, { badge: string; border: string; dot: string; title: string }> = {
     critica: { badge: 'bg-red-600 text-white', border: 'border-l-4 border-l-red-600', dot: 'bg-red-500', title: 'Emergência (Vermelho)' },
     alta: { badge: 'bg-orange-500 text-white', border: 'border-l-4 border-l-orange-500', dot: 'bg-orange-500', title: 'Muito Urgente (Laranja)' },
@@ -1419,6 +1448,16 @@ export function AtendimentosView({
               )}
             </div>
 
+            {/* Finalizar Conversa — arquiva o atendimento com motivo obrigatório */}
+            <div className="pt-2">
+              <button
+                onClick={() => setIsArchiveModalOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Finalizar Conversa
+              </button>
+            </div>
+
             {/* Delete Patient (Sensitive Action) */}
             <div className="pt-2">
               <button
@@ -1433,6 +1472,45 @@ export function AtendimentosView({
           </>
         ) : null}
       </div>
+
+      {/* Modal de Finalizar Conversa — exige motivo, nunca opcional */}
+      {isArchiveModalOpen && selectedPatient && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4" onClick={() => !isArchiving && setIsArchiveModalOpen(false)}>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h4 className="font-bold text-slate-900 text-sm">Finalizar conversa com {selectedPatient.name}?</h4>
+            <p className="text-slate-500 text-xs">
+              A conversa sairá da fila de Atendimentos e passará para Conversas Arquivadas. Se o paciente escrever de novo, ela reabre automaticamente.
+            </p>
+            <div>
+              <label className="block font-semibold text-slate-600 text-xs mb-1">Motivo do encerramento (obrigatório)</label>
+              <textarea
+                autoFocus
+                rows={3}
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+                placeholder="Ex.: Consulta concluída, paciente atendido com sucesso."
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setIsArchiveModalOpen(false)}
+                disabled={isArchiving}
+                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleArchiveConversation}
+                disabled={isArchiving || !archiveReason.trim()}
+                className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs disabled:opacity-40 transition-colors"
+              >
+                {isArchiving ? 'Finalizando...' : 'Finalizar Conversa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pop-up flutuante — card individual, aberto a partir da barra de ícones da coluna recolhida */}
       {popupCard && selectedPatient && (

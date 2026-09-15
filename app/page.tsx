@@ -22,6 +22,7 @@ import { ConfiguracoesView } from '@/components/views/ConfiguracoesView';
 import { AuditoriaLGPDView } from '@/components/views/AuditoriaLGPDView';
 import { AnaliseInteligenteView } from '@/components/views/AnaliseInteligenteView';
 import { UsuariosView } from "@/components/views/UsuariosView";
+import { ConversasArquivadasView } from "@/components/views/ConversasArquivadasView";
 
 // Modals
 import { DuplicateMergeModal } from '@/components/modals/DuplicateMergeModal';
@@ -256,6 +257,15 @@ function MediFluxAppContent() {
 
               {activeTab === "analise_inteligente" && (
                 <AnaliseInteligenteView />
+              )}
+
+              {activeTab === "conversas_arquivadas" && (
+                <ConversasArquivadasView
+                  onReopenAndNavigate={(patientId) => {
+                    setSelectedPatientId(patientId);
+                    setActiveTab("atendimentos");
+                  }}
+                />
               )}
             </>
           )}
