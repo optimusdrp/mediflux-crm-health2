@@ -93,6 +93,11 @@ export function AtendimentosView({
    */
   type ClinicalCardId = 'ficha' | 'checklist' | 'triagem';
   const [isClinicalColumnCollapsed, setIsClinicalColumnCollapsed] = useState(false);
+  // Em telas pequenas (abaixo de lg), o painel clínico fica oculto por
+  // padrão — o chat ocupa a tela toda. Um botão no cabeçalho do chat
+  // abre o painel como uma "página" própria (mestre-detalhe), em vez
+  // de empilhar tudo verticalmente numa rolagem só.
+  const [isMobileClinicalPanelOpen, setIsMobileClinicalPanelOpen] = useState(false);
   // Card aberto como pop-up flutuante (só existe enquanto a coluna
   // está recolhida) — null quando nenhum pop-up está aberto.
   const [popupCard, setPopupCard] = useState<ClinicalCardId | null>(null);
@@ -300,12 +305,13 @@ export function AtendimentosView({
   const [filterUrgency, setFilterUrgency] = useState('todas');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Correção de UX real: a rolagem forçava sempre o fim da conversa
-  // toda vez que uma mensagem nova chegava — mesmo se o usuário
-  // estivesse consultando o histórico mais acima, o que interrompia a
-  // leitura (ver relato real do usuário). Esta ref mede a posição de
-  // rolagem atual antes de decidir se desce sozinho ou não.
+  // Sem rolagem automática por mensagem nova — nem mesmo quando o
+  // usuário já estava perto do fim (comportamento anterior). A
+  // posição de rolagem de cada conversa é lembrada por paciente e
+  // restaurada ao reabri-la, exatamente de onde o usuário parou da
+  // última vez que a viu.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
 
   // Quick responses templates
   /**
@@ -517,25 +523,41 @@ export function AtendimentosView({
     return () => clearInterval(interval);
   }, [search, filterSpecialty, filterUrgency]);
 
-  // Scroll to bottom — só quando o usuário já estava perto do fim da
-  // conversa (não interrompe quem está lendo o histórico mais acima).
-  // Ao trocar de paciente (nova conversa aberta), sempre desce, já que
-  // não faz sentido abrir uma conversa no meio do histórico dela.
+  // Restaura a posição de rolagem salva desta conversa ao abri-la — só
+  // na troca de paciente, nunca em reação a mensagens novas chegando
+  // (mensagem nova NUNCA move a rolagem sozinha, mesmo se o usuário
+  // estava no fim da conversa).
   const previousPatientIdRef = useRef<string>('');
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
+    if (previousPatientIdRef.current === selectedPatientId) return; // mesma conversa, mensagem nova chegou — não mexe na rolagem
 
-    const isNewConversation = previousPatientIdRef.current !== selectedPatientId;
     previousPatientIdRef.current = selectedPatientId;
+    const savedPosition = scrollPositionsRef.current[selectedPatientId];
+    // requestAnimationFrame — garante que o DOM já renderizou as
+    // mensagens desta conversa antes de tentar posicionar a rolagem.
+    requestAnimationFrame(() => {
+      if (savedPosition !== undefined) {
+        container.scrollTop = savedPosition;
+      } else {
+        // Primeira vez que esta conversa é aberta nesta sessão do
+        // navegador — não há posição salva ainda, então começa no
+        // fim (mensagem mais recente), que é o ponto de entrada mais
+        // útil para uma conversa nunca vista antes.
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+  }, [selectedPatientId, messages]);
 
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const wasNearBottom = distanceFromBottom < 150; // margem de tolerância, em pixels
-
-    if (isNewConversation || wasNearBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: isNewConversation ? 'auto' : 'smooth' });
-    }
-  }, [messages, selectedPatientId]);
+  // Salva a posição de rolagem atual continuamente, por paciente —
+  // assim, ao trocar de conversa e voltar depois, o usuário encontra
+  // exatamente onde parou.
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container || !selectedPatientId) return;
+    scrollPositionsRef.current[selectedPatientId] = container.scrollTop;
+  };
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
@@ -573,6 +595,7 @@ export function AtendimentosView({
     setIsMessageSearchOpen(false);
     setMessageSearchQuery('');
     setIsEditingUrgency(false);
+    setIsMobileClinicalPanelOpen(false);
   }, [selectedPatientId]);
 
   const filteredMessages = messageSearchQuery.trim()
@@ -600,10 +623,10 @@ export function AtendimentosView({
 
       setMessages((prev) => [...prev, res.message]);
       setInputText('');
-      // Diferente da chegada de mensagem do paciente (que só desce se
-      // o usuário já estava perto do fim), o próprio envio sempre
-      // desce — ele acabou de agir, faz sentido ver a mensagem indo.
-      requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+      // Sem rolagem automática — a posição de rolagem do usuário é
+      // preservada mesmo ao enviar uma mensagem própria; ele já está
+      // olhando a conversa, e mexer na rolagem sem pedir seria a
+      // mesma interrupção indesejada que motivou remover isso.
 
       if (isInternalNote) {
         success('Nota Interna Salva', 'Visível apenas para a equipe da clínica.');
@@ -771,8 +794,9 @@ export function AtendimentosView({
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-61px)] overflow-hidden bg-slate-100">
-      {/* COLUMN 1: Queue / Patient List (340px) */}
-      <div className="w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
+      {/* COLUMN 1: Queue / Patient List (340px) — em telas pequenas (abaixo de lg), some quando um
+          paciente está selecionado, para dar lugar ao chat (layout mestre-detalhe, 1 coluna por vez) */}
+      <div className={`${selectedPatientId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex-col h-full`}>
         {/* Search & Header */}
         <div className="p-3 border-b border-slate-200 space-y-2">
           <div className="flex items-center justify-between">
@@ -923,23 +947,33 @@ export function AtendimentosView({
         </div>
       </div>
 
-      {/* COLUMN 2: Chat Stream & Omnichannel Messenger */}
-      <div className="flex-1 flex flex-col h-full bg-slate-50 border-r border-slate-200">
+      {/* COLUMN 2: Chat Stream & Omnichannel Messenger — em telas pequenas, só aparece com paciente
+          selecionado (a Coluna 1 já se escondeu acima); sem seleção, fica oculta, evitando o chat
+          vazio aparecer empilhado sob a fila inteira. */}
+      <div className={`${selectedPatientId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full bg-slate-50 border-r border-slate-200`}>
         {selectedPatient ? (
           <>
             {/* Chat Top Bar */}
             <div className="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Voltar à fila — só em telas pequenas, onde a Coluna 1 ficou oculta */}
+                <button
+                  onClick={() => setSelectedPatientId('')}
+                  className="lg:hidden shrink-0 p-1.5 -ml-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Voltar à fila de Atendimentos"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
                   {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-xs text-slate-900">{selectedPatient.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 capitalize">
+                    <h3 className="font-bold text-xs text-slate-900 truncate">{selectedPatient.name}</h3>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 capitalize shrink-0">
                       {selectedPatient.originChannel}
                     </span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${urgencyStyles[selectedPatient.urgency]?.badge || 'bg-slate-200 text-slate-700'}`}>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${urgencyStyles[selectedPatient.urgency]?.badge || 'bg-slate-200 text-slate-700'}`}>
                       {selectedPatient.urgency}
                     </span>
                   </div>
@@ -952,7 +986,15 @@ export function AtendimentosView({
               </div>
 
               {/* AI Trigger Action */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Abrir painel clínico — só em telas pequenas, onde ele fica oculto por padrão */}
+                <button
+                  onClick={() => setIsMobileClinicalPanelOpen(true)}
+                  className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+                  title="Abrir ficha clínica"
+                >
+                  <User className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => setIsMessageSearchOpen((prev) => !prev)}
                   className={`p-1.5 rounded-lg transition-colors ${
@@ -1024,7 +1066,7 @@ export function AtendimentosView({
             )}
 
             {/* Chat Messages Stream */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -1289,12 +1331,21 @@ export function AtendimentosView({
         )}
       </div>
 
-      {/* COLUMN 3: Clinical Card & AI Insights (340px, ou 64px recolhida) */}
+      {/* COLUMN 3: Clinical Card & AI Insights (340px, ou 64px recolhida) — em telas
+          pequenas, fica oculta por padrão (o chat ocupa a tela toda); abre como uma
+          "página" própria ao clicar no botão do cabeçalho do chat, com botão de voltar. */}
       <div
-        className={`${
-          isClinicalColumnCollapsed ? 'w-16' : 'w-full lg:w-80'
-        } shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-y-auto transition-[width] duration-200`}
+        className={`${isMobileClinicalPanelOpen ? 'flex' : 'hidden lg:flex'} ${
+          isClinicalColumnCollapsed ? 'w-full lg:w-16' : 'w-full lg:w-80'
+        } fixed lg:static inset-0 lg:inset-auto z-40 lg:z-auto shrink-0 bg-white border-l border-slate-200 flex-col h-full overflow-y-auto transition-[width] duration-200`}
       >
+        {/* Botão de voltar ao chat — só em telas pequenas, onde o painel vira tela cheia */}
+        <button
+          onClick={() => setIsMobileClinicalPanelOpen(false)}
+          className="lg:hidden flex items-center gap-1.5 p-3 border-b border-slate-200 text-xs font-semibold text-slate-600"
+        >
+          <ChevronsLeft className="w-4 h-4" /> Voltar à conversa
+        </button>
         {selectedPatient ? (
           <>
             {isClinicalColumnCollapsed ? (
