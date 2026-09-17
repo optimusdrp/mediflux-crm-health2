@@ -15,6 +15,8 @@ import {
   X,
   AlertTriangle,
   ChevronDown,
+  Users,
+  Phone,
 } from 'lucide-react';
 
 interface JornadasViewProps {
@@ -23,6 +25,14 @@ interface JornadasViewProps {
 }
 
 const URGENCY_DOT: Record<UrgencyLevel, string> = {
+  critica: 'bg-red-500',
+  alta: 'bg-orange-500',
+  media: 'bg-amber-400',
+  baixa: 'bg-emerald-500',
+};
+
+/** Barra lateral de urgência no card — mais forte visualmente que um pontinho, dá pra reconhecer a urgência num relance ao rolar a coluna. */
+const URGENCY_BAR: Record<UrgencyLevel, string> = {
   critica: 'bg-red-500',
   alta: 'bg-orange-500',
   media: 'bg-amber-400',
@@ -46,26 +56,22 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
 };
 
 /**
- * Jornadas Clínicas & Funil de Pacientes — reescrita completa.
+ * Jornadas Clínicas & Funil de Pacientes.
  *
- * Antes: 5 etapas FIXAS, hard-coded no componente, sem nenhuma
- * relação com os funis reais que a clínica configura em
- * Configurações → Gestão de Funis & Etapas (nome, cor, ordem, campos
- * obrigatórios por etapa — todos esses dados já existiam e já
- * persistiam, só esta tela nunca os usava). Um admin podia criar um
- * funil customizado inteiro e esta tela continuava mostrando as
- * mesmas 5 colunas de sempre.
- *
- * Agora: busca os funis reais (ClinicSettings.funnels), com seletor
- * quando há mais de um; monta as colunas a partir das FunnelStage de
- * cada funil; respeita requiredFields/lockAdvanceWithoutRequiredFields
- * ao tentar avançar; permite avançar E retroceder; drag-and-drop real
- * entre colunas; pede motivo ao mover para a última etapa de um funil
- * "de saída" (perdido/desistência — identificado pelo nome da etapa,
- * já que o schema não tem um campo dedicado "isLossStage"); mostra há
- * quanto tempo o paciente está parado na etapa atual; filtro de
- * urgência; resumo no topo; e um preview rápido ao clicar no card,
- * sem precisar navegar para Atendimentos.
+ * Redesign visual (mantém 100% da lógica/funcionalidade já existente
+ * — funis reais, drag-and-drop, campos obrigatórios, motivo de
+ * perda, indicador de tempo parado, filtros, preview rápido):
+ *  - Cards ganharam avatar com iniciais e uma barra lateral colorida
+ *    de urgência (mais legível que um pontinho pequeno ao rolar
+ *    rapidamente a coluna).
+ *  - Cabeçalho de cada coluna ganhou uma barra de progresso mostrando
+ *    o volume da etapa em relação à etapa mais cheia do funil — dá
+ *    uma leitura visual imediata de onde o funil está represado.
+ *  - Resumo do topo virou mini-cards de estatística (total, parados,
+ *    por urgência), não só uma linha de texto.
+ *  - Responsividade: colunas com largura mínima própria e scroll
+ *    horizontal suave em telas médias, uma coluna por vez em
+ *    celular, sem depender de esconder informação.
  */
 export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: JornadasViewProps) {
   const { success, error } = useToast();
@@ -125,8 +131,6 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     [activeFunnel]
   );
 
-  // Conversas arquivadas somem da fila de Atendimentos — faz sentido
-  // que também não poluam o funil, que é sobre atendimento ativo.
   const funnelPatients = useMemo(
     () =>
       patients.filter(
@@ -143,13 +147,8 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   };
 
-  // Etapa "de saída" — identificada pelo nome conter "perdid" ou
-  // "desist", já que o schema de FunnelStage não tem um campo
-  // dedicado para marcar isso. Cobre o caso do funil padrão
-  // ("Perdido / Desistência") e qualquer funil customizado que use
-  // nomenclatura parecida; funis que não tiverem uma etapa assim
-  // simplesmente nunca pedem o motivo.
   const isLossStage = (stage: FunnelStage): boolean => {
+    if (stage.isExitStage !== undefined) return stage.isExitStage;
     const name = stage.name.toLowerCase();
     return name.includes('perdid') || name.includes('desist');
   };
@@ -198,10 +197,6 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     if (!lossModalPatient || !lossReason.trim()) return;
     setIsSavingLoss(true);
     const targetStage = stages.find((s) => s.id === lossModalTargetStage);
-    // Motivo de perda registrado nas notas do paciente — o schema de
-    // Patient não tem um campo dedicado para isso; notes já é onde o
-    // resto do sistema guarda observações de texto livre sobre o
-    // paciente, então é o lugar consistente para isso também.
     const notePrefix = `[Motivo de perda/desistência — ${new Date().toLocaleDateString('pt-BR')}]: ${lossReason.trim()}`;
     await moveStage(lossModalPatient.id, lossModalTargetStage, targetStage?.name || 'etapa de saída', notePrefix);
     setIsSavingLoss(false);
@@ -218,36 +213,69 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     attemptMoveStage(patient, stage);
   };
 
-  // Resumo: pacientes parados há mais de 3 dias na etapa atual —
-  // sinal simples de possível gargalo, sem introduzir uma métrica
-  // nova complexa.
   const stalledCount = funnelPatients.filter((p) => daysSince(p.lastInteractionAt) > 3).length;
+  const criticalCount = funnelPatients.filter((p) => p.urgency === 'critica' || p.urgency === 'alta').length;
+
+  // Volume máximo entre as etapas — usado para a barra de progresso
+  // do cabeçalho de cada coluna (leitura visual de onde o funil
+  // está represado, sem precisar contar os cards de cada uma).
+  const maxStageVolume = Math.max(1, ...stages.map((s) => funnelPatients.filter((p) => p.funnelStage === s.id).length));
+
+  const initials = (name: string) =>
+    name
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
 
   return (
-    <div className="p-6 space-y-4 max-w-7xl mx-auto flex flex-col h-[calc(100vh-61px)]">
+    <div className="flex flex-col h-[calc(100vh-61px)] bg-slate-50">
       {/* Header & Filters */}
-      <div className="flex flex-col gap-3 shrink-0">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
+      <div className="p-5 pb-4 space-y-4 shrink-0 bg-white border-b border-slate-200">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
               <KanbanSquare className="w-5 h-5 text-sky-600" />
-              <h2 className="text-lg font-bold text-slate-900">Jornadas Clínicas & Funil de Pacientes</h2>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Acompanhamento visual do fluxo de atendimento, desde a entrada até a consulta e pós-atendimento.
-            </p>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 leading-tight">Jornadas Clínicas & Funil de Pacientes</h2>
+              <p className="text-[11px] text-slate-500">Da entrada até a consulta e pós-atendimento, tudo num fluxo visual.</p>
+            </div>
           </div>
 
           <button
             onClick={onOpenNewPatientModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors shrink-0"
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors shrink-0"
           >
             <Plus className="w-3.5 h-3.5" /> Novo Paciente
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Seletor de funil — só aparece de fato como escolha quando há mais de um configurado */}
+        {/* Resumo em mini-cards — leitura rápida do estado geral do funil */}
+        <div className="grid grid-cols-3 gap-2.5 max-w-xl">
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Total</div>
+            <div className="text-lg font-bold text-slate-900 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5 text-slate-400" /> {funnelPatients.length}
+            </div>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${stalledCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wide ${stalledCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>Parados +3d</div>
+            <div className={`text-lg font-bold flex items-center gap-1 ${stalledCount > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
+              <AlertTriangle className="w-3.5 h-3.5" /> {stalledCount}
+            </div>
+          </div>
+          <div className={`p-2.5 rounded-xl border ${criticalCount > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+            <div className={`text-[10px] font-semibold uppercase tracking-wide ${criticalCount > 0 ? 'text-red-700' : 'text-slate-500'}`}>Alta/Crítica</div>
+            <div className={`text-lg font-bold flex items-center gap-1 ${criticalCount > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> {criticalCount}
+            </div>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-2">
           {funnels.length > 1 && (
             <div className="relative">
               <select
@@ -300,20 +328,10 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
               </option>
             ))}
           </select>
-
-          {/* Resumo rápido */}
-          <div className="flex items-center gap-3 ml-auto text-[11px] text-slate-500">
-            <span className="font-semibold text-slate-700">{funnelPatients.length} paciente(s)</span>
-            {stalledCount > 0 && (
-              <span className="flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">
-                <AlertTriangle className="w-3 h-3" /> {stalledCount} parado(s) há +3 dias
-              </span>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* Kanban Board Container */}
+      {/* Kanban Board — scroll horizontal suave, colunas com largura mínima própria */}
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">Carregando funil...</div>
       ) : stages.length === 0 ? (
@@ -323,10 +341,11 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
           <p className="text-[11px]">Configure um funil em Configurações → Gestão de Funis & Etapas.</p>
         </div>
       ) : (
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4 items-start">
+        <div className="flex-1 flex gap-4 overflow-x-auto p-5 pt-4">
           {stages.map((stage, stageIndex) => {
             const stagePatients = funnelPatients.filter((p) => p.funnelStage === stage.id);
             const isDragOver = dragOverStageId === stage.id;
+            const volumePercent = Math.round((stagePatients.length / maxStageVolume) * 100);
 
             return (
               <div
@@ -337,19 +356,29 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
                 }}
                 onDragLeave={() => setDragOverStageId((prev) => (prev === stage.id ? null : prev))}
                 onDrop={() => handleDrop(stage)}
-                className={`bg-slate-100/80 rounded-2xl border flex flex-col max-h-full overflow-hidden border-t-4 transition-colors ${
-                  isDragOver ? 'border-sky-400 bg-sky-50/60' : 'border-slate-200'
+                className={`w-[85vw] sm:w-72 shrink-0 bg-white rounded-2xl border flex flex-col max-h-full overflow-hidden shadow-2xs transition-all ${
+                  isDragOver ? 'border-sky-400 ring-2 ring-sky-200 bg-sky-50/40' : 'border-slate-200'
                 }`}
-                style={{ borderTopColor: stage.color }}
               >
-                {/* Column Header */}
-                <div className="p-3.5 bg-white border-b border-slate-200/80 flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-800 truncate">{stage.name}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">{stagePatients.length}</span>
+                {/* Column Header — nome, contagem, e barra de progresso de volume relativo */}
+                <div className="p-3.5 border-b border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-xs text-slate-800 truncate flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stage.color || '#64748b' }} />
+                      {stage.name}
+                    </span>
+                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">{stagePatients.length}</span>
+                  </div>
+                  <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${volumePercent}%`, backgroundColor: stage.color || '#64748b' }}
+                    />
+                  </div>
                 </div>
 
                 {/* Cards Scrollable */}
-                <div className="p-2.5 space-y-2.5 overflow-y-auto flex-1 min-h-[300px]">
+                <div className="p-2.5 space-y-2.5 overflow-y-auto flex-1 min-h-[200px]">
                   {stagePatients.length === 0 ? (
                     <div className="p-4 text-center text-slate-400 text-xs italic">Nenhum paciente nesta etapa.</div>
                   ) : (
@@ -364,50 +393,61 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
                           onDragStart={() => setDraggedPatientId(p.id)}
                           onDragEnd={() => setDraggedPatientId(null)}
                           onClick={() => setPreviewPatient(p)}
-                          className={`bg-white p-3.5 rounded-xl border shadow-2xs hover:shadow-xs transition-all space-y-2 group cursor-grab active:cursor-grabbing ${
+                          className={`relative overflow-hidden bg-white rounded-xl border shadow-2xs hover:shadow-md transition-all group cursor-grab active:cursor-grabbing ${
                             isStalled ? 'border-amber-200' : 'border-slate-200'
-                          }`}
+                          } ${draggedPatientId === p.id ? 'opacity-40' : ''}`}
                         >
-                          <div className="flex items-start justify-between gap-1.5">
-                            <span className="font-bold text-xs text-slate-900 group-hover:text-sky-600 transition-colors">{p.name}</span>
-                            <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${URGENCY_DOT[p.urgency]}`} title={`Urgência: ${URGENCY_LABELS[p.urgency]}`} />
-                          </div>
+                          {/* Barra lateral de urgência — mais visível que um pontinho ao rolar rápido */}
+                          <div className={`absolute left-0 top-0 bottom-0 w-1 ${URGENCY_BAR[p.urgency]}`} />
 
-                          <div className="text-[11px] text-slate-500 space-y-0.5">
-                            <div>
+                          <div className="p-3 pl-3.5 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {initials(p.name)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-xs text-slate-900 group-hover:text-sky-600 transition-colors truncate">{p.name}</div>
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
+                                  <Phone className="w-2.5 h-2.5 shrink-0" /> {p.phone}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-slate-500">
                               {p.specialty} • <span className="font-medium text-slate-700">{p.healthInsurance}</span>
                             </div>
+
                             <div className={`text-[10px] flex items-center gap-1 ${isStalled ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
                               <Clock className="w-3 h-3" />
                               <span>{daysInStage === 0 ? 'Hoje' : `há ${daysInStage} dia${daysInStage > 1 ? 's' : ''} nesta etapa`}</span>
                             </div>
-                          </div>
 
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => onSelectPatient(p.id)} className="text-sky-600 hover:text-sky-800 font-semibold">
-                              Abrir Atendimento
-                            </button>
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => onSelectPatient(p.id)} className="text-sky-600 hover:text-sky-800 font-semibold">
+                                Abrir Atendimento
+                              </button>
 
-                            <div className="flex items-center gap-1">
-                              {stageIndex > 0 && (
-                                <button
-                                  onClick={() => attemptMoveStage(p, stages[stageIndex - 1])}
-                                  className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors"
-                                  title={`Retroceder para "${stages[stageIndex - 1].name}"`}
-                                >
-                                  <ArrowLeft className="w-3 h-3" />
-                                </button>
-                              )}
-                              {stageIndex < stages.length - 1 && (
-                                <button
-                                  onClick={() => attemptMoveStage(p, stages[stageIndex + 1])}
-                                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium flex items-center gap-0.5"
-                                  title={`Avançar para "${stages[stageIndex + 1].name}"`}
-                                >
-                                  <span>Avançar</span>
-                                  <ArrowRight className="w-3 h-3" />
-                                </button>
-                              )}
+                              <div className="flex items-center gap-1">
+                                {stageIndex > 0 && (
+                                  <button
+                                    onClick={() => attemptMoveStage(p, stages[stageIndex - 1])}
+                                    className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors"
+                                    title={`Retroceder para "${stages[stageIndex - 1].name}"`}
+                                  >
+                                    <ArrowLeft className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {stageIndex < stages.length - 1 && (
+                                  <button
+                                    onClick={() => attemptMoveStage(p, stages[stageIndex + 1])}
+                                    className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium flex items-center gap-0.5"
+                                    title={`Avançar para "${stages[stageIndex + 1].name}"`}
+                                  >
+                                    <span>Avançar</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
