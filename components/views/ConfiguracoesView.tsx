@@ -1498,19 +1498,19 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                               onClick={() => handleToggleExitStage(funnel.id, st.id, st.isExitStage)}
                               disabled={isTogglingExitStage === st.id}
                               className={`w-full flex items-center justify-between text-[10px] pt-1.5 mt-1 border-t border-slate-100 transition-colors disabled:opacity-50 ${
-                                st.isExitStage ? 'text-amber-700' : 'text-slate-400 hover:text-slate-600'
+                                st.isExitStage ? 'text-sky-700' : 'text-slate-400 hover:text-slate-600'
                               }`}
                               title="Marcar como etapa de saída (perda/desistência) — pede motivo ao mover um paciente para cá"
                             >
                               <span className="font-medium">Etapa de saída</span>
                               <span
-                                className={`shrink-0 relative w-9 h-5 rounded-full transition-colors ${
-                                  st.isExitStage ? 'bg-amber-500' : 'bg-slate-300'
+                                className={`shrink-0 relative inline-block w-9 h-5 rounded-full overflow-hidden transition-colors ${
+                                  st.isExitStage ? 'bg-sky-600' : 'bg-slate-300'
                                 }`}
                               >
                                 <span
-                                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${
-                                    st.isExitStage ? 'translate-x-4' : 'translate-x-0.5'
+                                  className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
+                                    st.isExitStage ? 'translate-x-4' : 'translate-x-0'
                                   }`}
                                 />
                               </span>
