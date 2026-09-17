@@ -332,6 +332,15 @@ export interface FunnelStage {
   order: number;
   requiredFields: string[]; // e.g. ['cpf', 'healthInsurance', 'planNumber']
   lockAdvanceWithoutRequiredFields: boolean;
+  /**
+   * Marca esta etapa como "de saída" (perda/desistência) — mover um
+   * paciente para cá pede um motivo obrigatório. Campo explícito, em
+   * vez de detectar pelo nome da etapa (buscar "perdid"/"desist" no
+   * texto) — essa detecção só cobria o funil padrão; clínicas com
+   * nomenclatura diferente (ex.: "Sem Retorno", "Cancelado") não
+   * eram identificadas.
+   */
+  isExitStage?: boolean;
 }
 
 export interface Funnel {
