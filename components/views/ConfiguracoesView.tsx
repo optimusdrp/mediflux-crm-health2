@@ -345,6 +345,27 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
     }
   };
 
+  /**
+   * Marca/desmarca uma etapa como "de saída" (perda/desistência).
+   * Mover um paciente para uma etapa marcada assim, em Jornadas &
+   * Funis, passa a exigir um motivo obrigatório — substitui a
+   * detecção antiga por nome da etapa (buscar "perdid"/"desist" no
+   * texto), que só cobria o funil padrão.
+   */
+  const [isTogglingExitStage, setIsTogglingExitStage] = useState<string | null>(null);
+  const handleToggleExitStage = async (funnelId: string, stageId: string, currentValue: boolean | undefined) => {
+    setIsTogglingExitStage(stageId);
+    try {
+      const res = await apiService.updateFunnelStage(funnelId, stageId, { isExitStage: !currentValue });
+      refreshSettingsAfterFunnelChange(res.funnels);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao atualizar etapa';
+      error('Falha ao atualizar etapa', msg);
+    } finally {
+      setIsTogglingExitStage(null);
+    }
+  };
+
   const executeDeleteFunnel = async (funnelId: string, force: boolean) => {
     try {
       const res = await apiService.deleteFunnel(funnelId, force);
@@ -1349,6 +1370,30 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                               {st.lockAdvanceWithoutRequiredFields ? 'Bloqueio Ativo' : 'Avanço Livre'}
                             </span>
                           </div>
+
+                          {/* Etapa de saída — mover paciente para cá em Jornadas & Funis
+                              passa a exigir um motivo obrigatório de perda/desistência. */}
+                          <button
+                            onClick={() => handleToggleExitStage(funnel.id, st.id, st.isExitStage)}
+                            disabled={isTogglingExitStage === st.id}
+                            className={`w-full flex items-center justify-between text-[10px] pt-1.5 mt-1 border-t border-slate-100 transition-colors disabled:opacity-50 ${
+                              st.isExitStage ? 'text-amber-700' : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                            title="Marcar como etapa de saída (perda/desistência) — pede motivo ao mover um paciente para cá"
+                          >
+                            <span className="font-medium">Etapa de saída (perda/desistência)</span>
+                            <span
+                              className={`shrink-0 relative w-8 h-4.5 rounded-full transition-colors ${
+                                st.isExitStage ? 'bg-amber-500' : 'bg-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-xs transition-transform ${
+                                  st.isExitStage ? 'translate-x-4' : 'translate-x-0.5'
+                                }`}
+                              />
+                            </span>
+                          </button>
                         </div>
                       ))}
 
