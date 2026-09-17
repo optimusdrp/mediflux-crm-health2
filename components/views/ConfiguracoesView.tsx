@@ -39,6 +39,8 @@ import {
   Plus,
   Trash2,
   Edit3,
+  ChevronUp,
+  ChevronDown,
   X,
   Send,
   AlertTriangle,
@@ -303,6 +305,92 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
   const [newStageNameByFunnel, setNewStageNameByFunnel] = useState<Record<string, string>>({});
   const [isCreatingStageFor, setIsCreatingStageFor] = useState<string | null>(null);
   const [funnelActionError, setFunnelActionError] = useState<string | null>(null);
+
+  /**
+   * Edição completa de etapa (nome, campos obrigatórios, bloqueio de
+   * avanço, cor) — antes só existia criação (nome) e exclusão; editar
+   * qualquer outro dado de uma etapa já existente não tinha UI
+   * nenhuma, mesmo o backend já aceitando isso há tempo.
+   */
+  const [editingStage, setEditingStage] = useState<{ funnelId: string; stage: FunnelStage } | null>(null);
+  const [stageEditForm, setStageEditForm] = useState<{ name: string; color: string; requiredFields: string[]; lockAdvanceWithoutRequiredFields: boolean }>({
+    name: '',
+    color: '#64748b',
+    requiredFields: [],
+    lockAdvanceWithoutRequiredFields: false,
+  });
+  const [isSavingStageEdit, setIsSavingStageEdit] = useState(false);
+
+  const AVAILABLE_REQUIRED_FIELDS = [
+    { key: 'cpf', label: 'CPF' },
+    { key: 'healthInsurance', label: 'Convênio' },
+    { key: 'planNumber', label: 'Nº do Plano' },
+    { key: 'birthDate', label: 'Data de Nascimento' },
+    { key: 'phone', label: 'Telefone' },
+    { key: 'specialty', label: 'Especialidade' },
+  ];
+
+  const openStageEditModal = (funnelId: string, stage: FunnelStage) => {
+    setEditingStage({ funnelId, stage });
+    setStageEditForm({
+      name: stage.name,
+      color: stage.color || '#64748b',
+      requiredFields: stage.requiredFields || [],
+      lockAdvanceWithoutRequiredFields: !!stage.lockAdvanceWithoutRequiredFields,
+    });
+  };
+
+  const handleSaveStageEdit = async () => {
+    if (!editingStage || !stageEditForm.name.trim()) return;
+    setIsSavingStageEdit(true);
+    try {
+      const res = await apiService.updateFunnelStage(editingStage.funnelId, editingStage.stage.id, {
+        name: stageEditForm.name.trim(),
+        color: stageEditForm.color,
+        requiredFields: stageEditForm.requiredFields,
+        lockAdvanceWithoutRequiredFields: stageEditForm.lockAdvanceWithoutRequiredFields,
+      });
+      refreshSettingsAfterFunnelChange(res.funnels);
+      success('Etapa Atualizada', `"${stageEditForm.name.trim()}" foi salva.`);
+      setEditingStage(null);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao salvar etapa';
+      error('Falha ao salvar etapa', msg);
+    } finally {
+      setIsSavingStageEdit(false);
+    }
+  };
+
+  /**
+   * Reordenar etapas — botões de mover para cima/baixo (mais simples
+   * e confiável que drag-and-drop numa lista que já tem seu próprio
+   * scroll/responsividade), trocando o campo `order` das duas etapas
+   * envolvidas e salvando as duas de uma vez.
+   */
+  const [isReorderingStage, setIsReorderingStage] = useState<string | null>(null);
+  const handleReorderStage = async (funnel: Funnel, stageIndex: number, direction: 'up' | 'down') => {
+    const sortedStages = [...funnel.stages].sort((a, b) => a.order - b.order);
+    const targetIndex = direction === 'up' ? stageIndex - 1 : stageIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedStages.length) return;
+
+    const current = sortedStages[stageIndex];
+    const target = sortedStages[targetIndex];
+    setIsReorderingStage(current.id);
+    try {
+      // As duas trocam de posição — grava a ordem uma de cada vez,
+      // aplicando o resultado da primeira antes de mandar a segunda,
+      // para nunca sobrescrever com um estado intermediário incorreto.
+      const res1 = await apiService.updateFunnelStage(funnel.id, current.id, { order: target.order });
+      const res2 = await apiService.updateFunnelStage(funnel.id, target.id, { order: current.order });
+      refreshSettingsAfterFunnelChange(res2.funnels);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao reordenar etapa';
+      error('Falha ao reordenar etapa', msg);
+    } finally {
+      setIsReorderingStage(null);
+    }
+  };
+
   const [pendingDeletion, setPendingDeletion] = useState<
     { type: 'funnel'; funnelId: string; name: string } | { type: 'stage'; funnelId: string; stageId: string; name: string } | null
   >(null);
@@ -1259,16 +1347,18 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
           {/* ========================================================================= */}
           {activeSubTab === 8 && (
             <div className="space-y-6 text-xs">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Jornadas Clínicas & Funis Customizados</h3>
-                  <p className="text-slate-500">Crie e organize os funis e etapas da jornada do paciente do seu jeito — recepção, triagem, consultório, o que fizer sentido para a clínica.</p>
-                </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Jornadas Clínicas & Funis Customizados</h3>
+                <p className="text-slate-500">
+                  Crie e organize os funis e etapas da jornada do paciente do seu jeito — recepção, triagem, consultório, o
+                  que fizer sentido para a clínica. Todo funil, incluindo o padrão, pode ser editado, reordenado e ter
+                  etapas adicionadas ou removidas livremente.
+                </p>
               </div>
 
               {/* Criar novo funil */}
-              <div className="p-4 bg-sky-50/60 rounded-2xl border border-sky-200/60 flex items-end gap-2">
-                <div className="flex-1">
+              <div className="p-4 bg-sky-50/60 rounded-2xl border border-sky-200/60 flex flex-col sm:flex-row sm:items-end gap-2">
+                <div className="flex-1 min-w-0">
                   <label className="block font-semibold text-slate-600 mb-1">Nome do novo funil</label>
                   <input
                     type="text"
@@ -1282,144 +1372,261 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                 <button
                   onClick={handleCreateFunnel}
                   disabled={!newFunnelName.trim() || isCreatingFunnel}
-                  className="px-4 py-2 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  className="px-4 py-2 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   {isCreatingFunnel ? 'Criando...' : 'Novo Funil'}
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {(settings?.funnels || []).length === 0 && (
                   <div className="text-center py-8 text-slate-400">
                     Nenhum funil criado ainda. Use o campo acima para criar o primeiro.
                   </div>
                 )}
-                {(settings?.funnels || []).map((funnel) => (
-                  <div key={funnel.id} className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <KanbanSquare className="w-4 h-4 text-sky-600" />
-                        <span className="font-bold text-slate-900 text-sm">{funnel.name}</span>
-                        {funnel.isDefault && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
-                            Funil Padrão
+                {(settings?.funnels || []).map((funnel) => {
+                  const sortedStages = [...funnel.stages].sort((a, b) => a.order - b.order);
+                  return (
+                    <div key={funnel.id} className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                      {/* Cabeçalho do funil — empilha em telas estreitas, evitando espremer o nome */}
+                      <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <KanbanSquare className="w-4 h-4 text-sky-600 shrink-0" />
+                          <span className="font-bold text-slate-900 text-sm truncate">{funnel.name}</span>
+                          {funnel.isDefault && (
+                            <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
+                              Funil Padrão
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-slate-500 font-medium">
+                            {funnel.stages.length} etapa{funnel.stages.length !== 1 ? 's' : ''}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 font-medium">
-                          {funnel.stages.length} etapa{funnel.stages.length !== 1 ? 's' : ''}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setFunnelActionError(null);
-                            setPendingDeletion({ type: 'funnel', funnelId: funnel.id, name: funnel.name });
-                          }}
-                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded-lg transition-all"
-                          title="Excluir funil"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Funnel Stages List */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2">
-                      {funnel.stages.map((st, idx) => (
-                        <div
-                          key={st.id}
-                          className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1.5"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 text-[10px] flex items-center justify-center font-bold">
-                                {idx + 1}
-                              </span>
-                              {st.name}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setFunnelActionError(null);
-                                setPendingDeletion({ type: 'stage', funnelId: funnel.id, stageId: st.id, name: st.name });
-                              }}
-                              className="text-slate-400 hover:text-rose-600 transition-colors"
-                              title="Excluir etapa"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          <div className="text-[11px] text-slate-500">
-                            {st.requiredFields.length > 0 ? (
-                              <span>Exige: {st.requiredFields.join(', ')}</span>
-                            ) : (
-                              <span className="text-slate-400">Sem campos obrigatórios</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
-                            <span className="text-slate-500 font-mono">ID: {st.id}</span>
-                            <span
-                              className={`px-1.5 py-0.2 rounded font-medium ${
-                                st.lockAdvanceWithoutRequiredFields
-                                  ? 'bg-rose-50 text-rose-700'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {st.lockAdvanceWithoutRequiredFields ? 'Bloqueio Ativo' : 'Avanço Livre'}
-                            </span>
-                          </div>
-
-                          {/* Etapa de saída — mover paciente para cá em Jornadas & Funis
-                              passa a exigir um motivo obrigatório de perda/desistência. */}
+                          {/* Excluir funil — sem restrição especial para o padrão; se for
+                              excluído, o backend promove outro funil a padrão automaticamente. */}
                           <button
-                            onClick={() => handleToggleExitStage(funnel.id, st.id, st.isExitStage)}
-                            disabled={isTogglingExitStage === st.id}
-                            className={`w-full flex items-center justify-between text-[10px] pt-1.5 mt-1 border-t border-slate-100 transition-colors disabled:opacity-50 ${
-                              st.isExitStage ? 'text-amber-700' : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                            title="Marcar como etapa de saída (perda/desistência) — pede motivo ao mover um paciente para cá"
+                            onClick={() => {
+                              setFunnelActionError(null);
+                              setPendingDeletion({ type: 'funnel', funnelId: funnel.id, name: funnel.name });
+                            }}
+                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded-lg transition-all"
+                            title="Excluir funil"
                           >
-                            <span className="font-medium">Etapa de saída (perda/desistência)</span>
-                            <span
-                              className={`shrink-0 relative w-8 h-4.5 rounded-full transition-colors ${
-                                st.isExitStage ? 'bg-amber-500' : 'bg-slate-300'
-                              }`}
-                            >
-                              <span
-                                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-xs transition-transform ${
-                                  st.isExitStage ? 'translate-x-4' : 'translate-x-0.5'
-                                }`}
-                              />
-                            </span>
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ))}
+                      </div>
 
-                      {/* Adicionar nova etapa */}
-                      <div className="p-3 bg-white/60 rounded-xl border border-dashed border-slate-300 flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Nova etapa..."
-                          value={newStageNameByFunnel[funnel.id] || ''}
-                          onChange={(e) => setNewStageNameByFunnel((prev) => ({ ...prev, [funnel.id]: e.target.value }))}
-                          onKeyDown={(e) => e.key === 'Enter' && handleCreateStage(funnel.id)}
-                          className="flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg text-[11px]"
-                        />
-                        <button
-                          onClick={() => handleCreateStage(funnel.id)}
-                          disabled={!(newStageNameByFunnel[funnel.id] || '').trim() || isCreatingStageFor === funnel.id}
-                          className="shrink-0 p-1.5 bg-sky-100 text-sky-700 rounded-lg hover:bg-sky-200 disabled:opacity-40"
-                          title="Adicionar etapa"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                      {/* Etapas — grade responsiva de verdade: 1 coluna no celular,
+                          2 em tablet, 3 em telas largas, sem depender de scroll horizontal. */}
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {sortedStages.map((st, idx) => (
+                          <div
+                            key={st.id}
+                            className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
+                            style={{ borderTopColor: st.color || '#64748b', borderTopWidth: '3px' }}
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className="font-bold text-slate-800 flex items-center gap-1.5 min-w-0">
+                                <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 text-[10px] flex items-center justify-center font-bold shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <span className="truncate">{st.name}</span>
+                              </span>
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {/* Reordenar — move a etapa para cima/baixo na sequência do funil */}
+                                <button
+                                  onClick={() => handleReorderStage(funnel, idx, 'up')}
+                                  disabled={idx === 0 || isReorderingStage === st.id}
+                                  className="text-slate-400 hover:text-sky-600 disabled:opacity-20 disabled:hover:text-slate-400 transition-colors p-0.5"
+                                  title="Mover para cima"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleReorderStage(funnel, idx, 'down')}
+                                  disabled={idx === sortedStages.length - 1 || isReorderingStage === st.id}
+                                  className="text-slate-400 hover:text-sky-600 disabled:opacity-20 disabled:hover:text-slate-400 transition-colors p-0.5"
+                                  title="Mover para baixo"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => openStageEditModal(funnel.id, st)}
+                                  className="text-slate-400 hover:text-sky-600 transition-colors p-0.5"
+                                  title="Editar etapa"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setFunnelActionError(null);
+                                    setPendingDeletion({ type: 'stage', funnelId: funnel.id, stageId: st.id, name: st.name });
+                                  }}
+                                  className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
+                                  title="Excluir etapa"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-slate-500">
+                              {st.requiredFields.length > 0 ? (
+                                <span>Exige: {st.requiredFields.join(', ')}</span>
+                              ) : (
+                                <span className="text-slate-400">Sem campos obrigatórios</span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                              <span className="text-slate-500 font-mono truncate">ID: {st.id}</span>
+                              <span
+                                className={`px-1.5 py-0.2 rounded font-medium shrink-0 ${
+                                  st.lockAdvanceWithoutRequiredFields ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {st.lockAdvanceWithoutRequiredFields ? 'Bloqueio Ativo' : 'Avanço Livre'}
+                              </span>
+                            </div>
+
+                            {/* Etapa de saída — mover paciente para cá em Jornadas & Funis
+                                passa a exigir um motivo obrigatório de perda/desistência. */}
+                            <button
+                              onClick={() => handleToggleExitStage(funnel.id, st.id, st.isExitStage)}
+                              disabled={isTogglingExitStage === st.id}
+                              className={`w-full flex items-center justify-between text-[10px] pt-1.5 mt-1 border-t border-slate-100 transition-colors disabled:opacity-50 ${
+                                st.isExitStage ? 'text-amber-700' : 'text-slate-400 hover:text-slate-600'
+                              }`}
+                              title="Marcar como etapa de saída (perda/desistência) — pede motivo ao mover um paciente para cá"
+                            >
+                              <span className="font-medium">Etapa de saída</span>
+                              <span
+                                className={`shrink-0 relative w-9 h-5 rounded-full transition-colors ${
+                                  st.isExitStage ? 'bg-amber-500' : 'bg-slate-300'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${
+                                    st.isExitStage ? 'translate-x-4' : 'translate-x-0.5'
+                                  }`}
+                                />
+                              </span>
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* Adicionar nova etapa — mesma grade, ocupa uma célula como as demais */}
+                        <div className="p-3.5 bg-white/60 rounded-xl border border-dashed border-slate-300 flex items-center gap-1.5 min-h-[3.5rem]">
+                          <input
+                            type="text"
+                            placeholder="Nova etapa..."
+                            value={newStageNameByFunnel[funnel.id] || ''}
+                            onChange={(e) => setNewStageNameByFunnel((prev) => ({ ...prev, [funnel.id]: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && handleCreateStage(funnel.id)}
+                            className="flex-1 min-w-0 px-2 py-1.5 border border-slate-200 rounded-lg text-[11px]"
+                          />
+                          <button
+                            onClick={() => handleCreateStage(funnel.id)}
+                            disabled={!(newStageNameByFunnel[funnel.id] || '').trim() || isCreatingStageFor === funnel.id}
+                            className="shrink-0 p-1.5 bg-sky-100 text-sky-700 rounded-lg hover:bg-sky-200 disabled:opacity-40"
+                            title="Adicionar etapa"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+
+              {/* Modal de edição completa da etapa */}
+              {editingStage && (
+                <div
+                  className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4"
+                  onClick={() => !isSavingStageEdit && setEditingStage(null)}
+                >
+                  <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-slate-900 text-sm">Editar Etapa</h4>
+                      <button onClick={() => setEditingStage(null)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Nome da etapa</label>
+                      <input
+                        type="text"
+                        value={stageEditForm.name}
+                        onChange={(e) => setStageEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Cor</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={stageEditForm.color}
+                          onChange={(e) => setStageEditForm((prev) => ({ ...prev, color: e.target.value }))}
+                          className="w-10 h-8 rounded border border-slate-300 cursor-pointer"
+                        />
+                        <span className="text-slate-500 font-mono">{stageEditForm.color}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1.5">Campos obrigatórios nesta etapa</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {AVAILABLE_REQUIRED_FIELDS.map((f) => (
+                          <label key={f.key} className="flex items-center gap-1.5 px-2 py-1.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={stageEditForm.requiredFields.includes(f.key)}
+                              onChange={(e) =>
+                                setStageEditForm((prev) => ({
+                                  ...prev,
+                                  requiredFields: e.target.checked
+                                    ? [...prev.requiredFields, f.key]
+                                    : prev.requiredFields.filter((k) => k !== f.key),
+                                }))
+                              }
+                            />
+                            <span>{f.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="flex items-center justify-between p-2.5 border border-slate-200 rounded-xl cursor-pointer">
+                      <span className="font-medium text-slate-700">Bloquear avanço sem os campos obrigatórios</span>
+                      <input
+                        type="checkbox"
+                        checked={stageEditForm.lockAdvanceWithoutRequiredFields}
+                        onChange={(e) => setStageEditForm((prev) => ({ ...prev, lockAdvanceWithoutRequiredFields: e.target.checked }))}
+                      />
+                    </label>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button onClick={() => setEditingStage(null)} disabled={isSavingStageEdit} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold disabled:opacity-50">
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveStageEdit}
+                        disabled={isSavingStageEdit || !stageEditForm.name.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold disabled:opacity-40 transition-colors"
+                      >
+                        {isSavingStageEdit ? 'Salvando...' : 'Salvar Etapa'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Confirmação de exclusão (funil ou etapa) */}
               {pendingDeletion && (
