@@ -203,6 +203,22 @@ export const apiService = {
     );
   },
 
+  /**
+   * Transcreve o áudio de uma mensagem já recebida — chamada sob
+   * demanda (o usuário clica no botão "Transcrever"), não automática
+   * em toda mensagem. A transcrição é salva no backend na primeira
+   * chamada; chamadas seguintes retornam do cache (campo `cached`).
+   */
+  async transcribeAudioMessage(patientId: string, messageId: string) {
+    return authFetch<{ transcription: string; cached: boolean }>(
+      "/api/chat/messages/transcribe",
+      {
+        method: "POST",
+        body: JSON.stringify({ patientId, messageId }),
+      },
+    );
+  },
+
   // 5. Inteligência Artificial Dual
   async analyzeMessageTriage(
     messageText: string,
