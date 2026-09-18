@@ -141,6 +141,19 @@ export const apiService = {
     });
   },
 
+  /**
+   * Envia ou troca a foto de perfil do paciente. Aceita JPEG, PNG ou
+   * WebP, até 3MB. A URL retornada é assinada e temporária (15 min)
+   * — a mesma URL não deve ser reaproveitada além disso; ao recarregar
+   * a lista de pacientes, uma nova URL válida já vem embutida.
+   */
+  async uploadPatientPhoto(patientId: string, base64: string, mimetype: string) {
+    return authFetch<{ patient: Patient }>(`/api/patients/${patientId}/photo`, {
+      method: "POST",
+      body: JSON.stringify({ base64, mimetype }),
+    });
+  },
+
   async deletePatient(id: string) {
     return authFetch<{ success: boolean; message: string }>(
       `/api/patients/${id}`,

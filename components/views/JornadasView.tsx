@@ -503,9 +503,13 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
 
                               <div className="p-3 pl-3.5 space-y-2">
                                 <div className="flex items-start gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                                    {initials(p.name)}
-                                  </div>
+                                  {p.photoUrl ? (
+                                    <img src={p.photoUrl} alt={p.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                                  ) : (
+                                    <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                                      {initials(p.name)}
+                                    </div>
+                                  )}
                                   <div className="min-w-0 flex-1">
                                     <div className="font-bold text-xs text-slate-900 group-hover:text-sky-600 transition-colors truncate">{p.name}</div>
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1 truncate">

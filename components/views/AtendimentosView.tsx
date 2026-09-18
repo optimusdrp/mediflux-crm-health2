@@ -288,6 +288,44 @@ export function AtendimentosView({
    * momento, para mostrar o spinner só naquele item específico.
    */
   const [transcribingMessageId, setTranscribingMessageId] = useState<string | null>(null);
+
+  /**
+   * Foto de perfil do paciente — antes o avatar era sempre as
+   * iniciais do nome; agora, quando uma foto é enviada, ela passa a
+   * aparecer no cabeçalho do chat e na lista da fila. Clicar no
+   * avatar abre o seletor de arquivo (JPEG/PNG/WebP, até 3MB).
+   */
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoSelected = async (file: File) => {
+    if (!selectedPatient) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      error('Formato não suportado', 'Envie uma imagem JPEG, PNG ou WebP.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      error('Imagem muito grande', 'O limite é 3MB por foto.');
+      return;
+    }
+    setIsUploadingPhoto(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await apiService.uploadPatientPhoto(selectedPatient.id, base64, file.type);
+      setPatients((prev) => prev.map((p) => (p.id === res.patient.id ? res.patient : p)));
+      success('Foto Atualizada', 'A foto de perfil do paciente foi salva.');
+    } catch (err: any) {
+      error('Falha ao enviar foto', err?.message || 'Tente novamente.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   const handleTranscribeAudio = async (messageId: string) => {
     if (!selectedPatient) return;
     setTranscribingMessageId(messageId);
@@ -923,7 +961,15 @@ export function AtendimentosView({
                   id={`patient-card-${p.id}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="truncate">
+                    <div className="flex items-start gap-2 min-w-0">
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.name} className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5" />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                          {p.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                        </div>
+                      )}
+                      <div className="truncate">
                       <div className="font-bold text-xs text-slate-900 truncate flex items-center gap-1">
                         {p.name}
                         {p.sentiment && (
@@ -935,6 +981,7 @@ export function AtendimentosView({
                         <span>•</span>
                         <span>{p.healthInsurance}</span>
                       </div>
+                    </div>
                     </div>
 
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase shrink-0 ${uStyle.badge}`}>
@@ -978,9 +1025,38 @@ export function AtendimentosView({
                   >
                     <ChevronsLeft className="w-4 h-4" />
                   </button>
-                  <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                    {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-                  </div>
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                    className="relative w-9 h-9 rounded-full shrink-0 group/avatar"
+                    title="Clique para enviar/trocar a foto de perfil"
+                  >
+                    {selectedPatient.photoUrl ? (
+                      <img src={selectedPatient.photoUrl} alt={selectedPatient.name} className="w-9 h-9 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                        {selectedPatient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
+                      {isUploadingPhoto ? (
+                        <RefreshCw className="w-3.5 h-3.5 text-white animate-spin" />
+                      ) : (
+                        <Edit3 className="w-3.5 h-3.5 text-white" />
+                      )}
+                    </div>
+                  </button>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePhotoSelected(file);
+                      e.target.value = '';
+                    }}
+                  />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h3 className="font-bold text-xs text-slate-900 truncate">{selectedPatient.name}</h3>

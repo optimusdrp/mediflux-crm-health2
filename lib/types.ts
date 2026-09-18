@@ -154,6 +154,17 @@ export interface Patient {
   /** Data de cadastro no sistema — ausente em pacientes cadastrados antes deste campo existir. */
   createdAt?: string;
   /**
+   * Foto de perfil do paciente — chave do arquivo no S3 (bucket
+   * privado, mesmo bucket usado para mídia do chat), nunca a URL
+   * final. O front-end recebe uma URL assinada temporária a cada
+   * GET /patients, gerada sob demanda — mesmo princípio já usado
+   * para documentos/imagens do chat (nunca uma URL permanente,
+   * dado que pode ser considerada dado pessoal sensível em algumas
+   * interpretações da LGPD).
+   */
+  photoS3Key?: string;
+  photoUrl?: string;
+  /**
    * Status da conversa — 'archived' significa que o atendente
    * finalizou o atendimento (com um motivo obrigatório, guardado em
    * archivedReason). Uma conversa arquivada some da fila normal de
