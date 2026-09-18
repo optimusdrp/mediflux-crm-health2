@@ -24,6 +24,7 @@ export type SensitiveAction =
   | 'gerenciar_cobranca'
   | 'disparar_webhooks_teste'
   | 'gerenciar_unidades'
+  | 'gerenciar_automacoes_funil'
   | 'visualizar_prontuario_sensivel';
 
 export type UrgencyLevel = 'critica' | 'alta' | 'media' | 'baixa';
@@ -353,6 +354,19 @@ export interface FunnelStage {
     minConversionPercent?: number;
     /** Prazo máximo esperado, em dias, para um paciente permanecer nesta etapa antes de avançar. */
     maxDaysInStage?: number;
+  };
+  /**
+   * Automação de entrada — dispara uma mensagem automática ao
+   * paciente assim que ele é movido para esta etapa (ex.: confirmação
+   * ao entrar em "Consulta Agendada"). Habilitar/desabilitar é uma
+   * ação restrita a administrador ou a quem o administrador conceder
+   * a ação 'gerenciar_automacoes_funil' (ver SensitiveAction).
+   * `messageText` suporta os mesmos placeholders de Respostas
+   * Rápidas ({{patient_name}}, {{clinic_name}}, etc.).
+   */
+  entryAutomation?: {
+    enabled: boolean;
+    messageText: string;
   };
 }
 

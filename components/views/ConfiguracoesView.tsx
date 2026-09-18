@@ -181,6 +181,7 @@ const ALL_ACTIONS: { id: SensitiveAction; label: string; danger?: boolean }[] = 
   { id: 'configurar_integracoes_pep', label: 'Configurar Credenciais PEP / EHR' },
   { id: 'gerenciar_cobranca', label: 'Gerenciar Assinatura & Faturamento' },
   { id: 'disparar_webhooks_teste', label: 'Disparar Testes de Webhook' },
+  { id: 'gerenciar_automacoes_funil', label: 'Gerenciar Automações de Funil (Mensagens Automáticas)' },
 ];
 
 interface ConfiguracoesViewProps {
@@ -196,6 +197,15 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [permissions, setPermissions] = useState<RolePermission[]>([]);
+  /**
+   * Configurar automações de funil (habilitar/desabilitar mensagem
+   * automática de entrada de etapa) é restrito a admin ou a quem o
+   * admin conceder a ação 'gerenciar_automacoes_funil' na Matriz RBAC
+   * (aba 7). Campos ficam desabilitados (não escondidos — o usuário
+   * ainda vê que a automação existe) para quem não tem a permissão.
+   */
+  const canManageFunnelAutomation =
+    user?.role === 'admin' || permissions.find((p) => p.role === user?.role)?.grantedActions.includes('gerenciar_automacoes_funil');
   const [users, setUsers] = useState<User[]>([]);
   const [ehrList, setEhrList] = useState<EHRIntegration[]>([]);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
@@ -320,6 +330,8 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
     lockAdvanceWithoutRequiredFields: boolean;
     minConversionPercent: string;
     maxDaysInStage: string;
+    automationEnabled: boolean;
+    automationMessageText: string;
   }>({
     name: '',
     color: '#64748b',
@@ -327,6 +339,8 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
     lockAdvanceWithoutRequiredFields: false,
     minConversionPercent: '',
     maxDaysInStage: '',
+    automationEnabled: false,
+    automationMessageText: '',
   });
   const [isSavingStageEdit, setIsSavingStageEdit] = useState(false);
 
@@ -348,6 +362,8 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
       lockAdvanceWithoutRequiredFields: !!stage.lockAdvanceWithoutRequiredFields,
       minConversionPercent: stage.conversionGoal?.minConversionPercent !== undefined ? String(stage.conversionGoal.minConversionPercent) : '',
       maxDaysInStage: stage.conversionGoal?.maxDaysInStage !== undefined ? String(stage.conversionGoal.maxDaysInStage) : '',
+      automationEnabled: !!stage.entryAutomation?.enabled,
+      automationMessageText: stage.entryAutomation?.messageText || '',
     });
   };
 
@@ -363,6 +379,10 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
         requiredFields: stageEditForm.requiredFields,
         lockAdvanceWithoutRequiredFields: stageEditForm.lockAdvanceWithoutRequiredFields,
         conversionGoal: minPercent !== undefined || maxDays !== undefined ? { minConversionPercent: minPercent, maxDaysInStage: maxDays } : undefined,
+        // Só envia entryAutomation se o usuário tiver permissão — evita
+        // mandar um campo que o backend vai rejeitar (403) mesmo que os
+        // demais campos do formulário devessem ser salvos normalmente.
+        entryAutomation: canManageFunnelAutomation ? { enabled: stageEditForm.automationEnabled, messageText: stageEditForm.automationMessageText.trim() } : undefined,
       });
       refreshSettingsAfterFunnelChange(res.funnels);
       success('Etapa Atualizada', `"${stageEditForm.name.trim()}" foi salva.`);
@@ -1670,6 +1690,43 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                           </div>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Automação de entrada — dispara mensagem automática ao
+                        paciente assim que ele entra nesta etapa. Restrito a
+                        admin ou a quem tiver a ação 'gerenciar_automacoes_funil'
+                        (Matriz RBAC, aba 7) — para quem não tem, os campos
+                        ficam visíveis mas desabilitados, não escondidos. */}
+                    <div className={`p-3 rounded-xl space-y-2.5 border ${canManageFunnelAutomation ? 'bg-emerald-50/50 border-emerald-200/60' : 'bg-slate-50 border-slate-200'}`}>
+                      <label className="flex items-center justify-between cursor-pointer">
+                        <span className={`font-semibold ${canManageFunnelAutomation ? 'text-emerald-900' : 'text-slate-500'}`}>
+                          Mensagem Automática ao Entrar Nesta Etapa
+                        </span>
+                        <input
+                          type="checkbox"
+                          disabled={!canManageFunnelAutomation}
+                          checked={stageEditForm.automationEnabled}
+                          onChange={(e) => setStageEditForm((prev) => ({ ...prev, automationEnabled: e.target.checked }))}
+                        />
+                      </label>
+                      {!canManageFunnelAutomation && (
+                        <p className="text-[11px] text-slate-500">Você não tem permissão para configurar automações de funil.</p>
+                      )}
+                      {stageEditForm.automationEnabled && (
+                        <div>
+                          <textarea
+                            rows={2}
+                            disabled={!canManageFunnelAutomation}
+                            placeholder="Ex.: Olá {{patient_name}}, sua consulta foi agendada com sucesso!"
+                            value={stageEditForm.automationMessageText}
+                            onChange={(e) => setStageEditForm((prev) => ({ ...prev, automationMessageText: e.target.value }))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400 resize-none"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Aceita as mesmas variáveis das Respostas Rápidas, como <code className="font-mono">{'{{patient_name}}'}</code>.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex justify-end gap-2 pt-1">
