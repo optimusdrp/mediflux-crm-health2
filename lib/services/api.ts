@@ -550,6 +550,7 @@ export const apiService = {
       requiredFields?: string[];
       lockAdvanceWithoutRequiredFields?: boolean;
       isExitStage?: boolean;
+      conversionGoal?: { minConversionPercent?: number; maxDaysInStage?: number };
     },
   ) {
     return authFetch<{ funnels: Funnel[] }>("/api/funnels/stages", {

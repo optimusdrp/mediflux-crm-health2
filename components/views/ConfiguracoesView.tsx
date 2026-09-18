@@ -313,11 +313,20 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
    * nenhuma, mesmo o backend já aceitando isso há tempo.
    */
   const [editingStage, setEditingStage] = useState<{ funnelId: string; stage: FunnelStage } | null>(null);
-  const [stageEditForm, setStageEditForm] = useState<{ name: string; color: string; requiredFields: string[]; lockAdvanceWithoutRequiredFields: boolean }>({
+  const [stageEditForm, setStageEditForm] = useState<{
+    name: string;
+    color: string;
+    requiredFields: string[];
+    lockAdvanceWithoutRequiredFields: boolean;
+    minConversionPercent: string;
+    maxDaysInStage: string;
+  }>({
     name: '',
     color: '#64748b',
     requiredFields: [],
     lockAdvanceWithoutRequiredFields: false,
+    minConversionPercent: '',
+    maxDaysInStage: '',
   });
   const [isSavingStageEdit, setIsSavingStageEdit] = useState(false);
 
@@ -337,6 +346,8 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
       color: stage.color || '#64748b',
       requiredFields: stage.requiredFields || [],
       lockAdvanceWithoutRequiredFields: !!stage.lockAdvanceWithoutRequiredFields,
+      minConversionPercent: stage.conversionGoal?.minConversionPercent !== undefined ? String(stage.conversionGoal.minConversionPercent) : '',
+      maxDaysInStage: stage.conversionGoal?.maxDaysInStage !== undefined ? String(stage.conversionGoal.maxDaysInStage) : '',
     });
   };
 
@@ -344,11 +355,14 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
     if (!editingStage || !stageEditForm.name.trim()) return;
     setIsSavingStageEdit(true);
     try {
+      const minPercent = stageEditForm.minConversionPercent.trim() ? Number(stageEditForm.minConversionPercent) : undefined;
+      const maxDays = stageEditForm.maxDaysInStage.trim() ? Number(stageEditForm.maxDaysInStage) : undefined;
       const res = await apiService.updateFunnelStage(editingStage.funnelId, editingStage.stage.id, {
         name: stageEditForm.name.trim(),
         color: stageEditForm.color,
         requiredFields: stageEditForm.requiredFields,
         lockAdvanceWithoutRequiredFields: stageEditForm.lockAdvanceWithoutRequiredFields,
+        conversionGoal: minPercent !== undefined || maxDays !== undefined ? { minConversionPercent: minPercent, maxDaysInStage: maxDays } : undefined,
       });
       refreshSettingsAfterFunnelChange(res.funnels);
       success('Etapa Atualizada', `"${stageEditForm.name.trim()}" foi salva.`);
@@ -1492,6 +1506,14 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                               </span>
                             </div>
 
+                            {(st.conversionGoal?.minConversionPercent !== undefined || st.conversionGoal?.maxDaysInStage !== undefined) && (
+                              <div className="text-[10px] text-sky-700 bg-sky-50 px-1.5 py-1 rounded flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold">Meta:</span>
+                                {st.conversionGoal?.minConversionPercent !== undefined && <span>≥{st.conversionGoal.minConversionPercent}% conversão</span>}
+                                {st.conversionGoal?.maxDaysInStage !== undefined && <span>≤{st.conversionGoal.maxDaysInStage}d na etapa</span>}
+                              </div>
+                            )}
+
                             {/* Etapa de saída — mover paciente para cá em Jornadas & Funis
                                 passa a exigir um motivo obrigatório de perda/desistência. */}
                             <button
@@ -1611,6 +1633,44 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                         onChange={(e) => setStageEditForm((prev) => ({ ...prev, lockAdvanceWithoutRequiredFields: e.target.checked }))}
                       />
                     </label>
+
+                    {/* Meta de desempenho — usada na Visão Executiva de Jornadas
+                        para comparar o real contra o esperado. Opcional: deixar
+                        em branco significa que a etapa não é avaliada. */}
+                    <div className="p-3 bg-sky-50/50 border border-sky-200/60 rounded-xl space-y-2.5">
+                      <div className="font-semibold text-sky-900">Meta de Desempenho (opcional)</div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-slate-600 mb-1">Conversão mínima esperada</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder="Ex.: 75"
+                              value={stageEditForm.minConversionPercent}
+                              onChange={(e) => setStageEditForm((prev) => ({ ...prev, minConversionPercent: e.target.value }))}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                            />
+                            <span className="text-slate-500 shrink-0">%</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-slate-600 mb-1">Prazo máximo na etapa</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="Ex.: 2"
+                              value={stageEditForm.maxDaysInStage}
+                              onChange={(e) => setStageEditForm((prev) => ({ ...prev, maxDaysInStage: e.target.value }))}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+                            />
+                            <span className="text-slate-500 shrink-0">dias</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="flex justify-end gap-2 pt-1">
                       <button onClick={() => setEditingStage(null)} disabled={isSavingStageEdit} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold disabled:opacity-50">

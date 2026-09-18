@@ -341,6 +341,19 @@ export interface FunnelStage {
    * eram identificadas.
    */
   isExitStage?: boolean;
+  /**
+   * Meta de desempenho desta etapa — usada na Visão Executiva de
+   * Jornadas para comparar o real contra o esperado, em vez de só
+   * mostrar volume bruto sem contexto. Ambos os campos são
+   * opcionais: uma etapa sem meta configurada simplesmente não é
+   * avaliada (não conta como "abaixo da meta").
+   */
+  conversionGoal?: {
+    /** Percentual mínimo esperado de pacientes que avançam desta etapa para a seguinte (0-100). */
+    minConversionPercent?: number;
+    /** Prazo máximo esperado, em dias, para um paciente permanecer nesta etapa antes de avançar. */
+    maxDaysInStage?: number;
+  };
 }
 
 export interface Funnel {
