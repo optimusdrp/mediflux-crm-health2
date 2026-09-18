@@ -87,6 +87,15 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
 
   const [draggedPatientId, setDraggedPatientId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+  /**
+   * Drag-and-drop de REORDENAÇÃO DE ETAPAS (colunas inteiras) — separado
+   * do drag-and-drop de mover um paciente entre etapas, que já existia.
+   * O "handle" de arrastar fica só no cabeçalho da coluna (não no card
+   * inteiro), para os dois gestos nunca colidirem visualmente: segurar
+   * o cabeçalho reordena a coluna; segurar um card move o paciente.
+   */
+  const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
+  const [isReorderingStagesInKanban, setIsReorderingStagesInKanban] = useState(false);
 
   const [lossModalPatient, setLossModalPatient] = useState<Patient | null>(null);
   const [lossModalTargetStage, setLossModalTargetStage] = useState<string>('');
@@ -254,11 +263,45 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
 
   const handleDrop = (stage: FunnelStage) => {
     setDragOverStageId(null);
+    // Se uma COLUNA está sendo arrastada, isso é reordenação de
+    // etapas — nunca mistura com mover paciente, que usa
+    // draggedPatientId (mutuamente exclusivo por causa de onde cada
+    // drag começa: cabeçalho da coluna vs. card do paciente).
+    if (draggedStageId) {
+      handleReorderStageDrop(stage);
+      return;
+    }
     if (!draggedPatientId) return;
     const patient = funnelPatients.find((p) => p.id === draggedPatientId);
     setDraggedPatientId(null);
     if (!patient || patient.funnelStage === stage.id) return;
     attemptMoveStage(patient, stage);
+  };
+
+  /**
+   * Aplica a nova ordem ao soltar uma coluna sobre outra — troca só
+   * os campos `order` das duas etapas envolvidas (mesmo princípio já
+   * usado em Configurações → Gestão de Funis, agora disponível
+   * também aqui, sem precisar trocar de tela).
+   */
+  const handleReorderStageDrop = async (targetStage: FunnelStage) => {
+    const sourceStageId = draggedStageId;
+    setDraggedStageId(null);
+    if (!sourceStageId || sourceStageId === targetStage.id || !activeFunnel) return;
+    const sourceStage = activeFunnel.stages.find((s) => s.id === sourceStageId);
+    if (!sourceStage) return;
+
+    setIsReorderingStagesInKanban(true);
+    try {
+      const res1 = await apiService.updateFunnelStage(activeFunnel.id, sourceStage.id, { order: targetStage.order });
+      const res2 = await apiService.updateFunnelStage(activeFunnel.id, targetStage.id, { order: sourceStage.order });
+      setFunnels((prev) => prev.map((f) => (f.id === activeFunnel.id ? { ...f, stages: res2.funnels.find((rf) => rf.id === activeFunnel.id)?.stages || f.stages } : f)));
+      success('Ordem Atualizada', `"${sourceStage.name}" e "${targetStage.name}" trocaram de posição.`);
+    } catch (err: any) {
+      error('Erro ao reordenar etapas', err.message);
+    } finally {
+      setIsReorderingStagesInKanban(false);
+    }
   };
 
   const stalledCount = funnelPatients.filter((p) => daysSince(p.lastInteractionAt) > 3).length;
@@ -461,9 +504,19 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
                     onDrop={() => handleDrop(stage)}
                     className={`w-[85vw] sm:w-72 shrink-0 bg-white rounded-2xl border flex flex-col max-h-full overflow-hidden shadow-2xs transition-all ${
                       isDragOver ? 'border-sky-400 ring-2 ring-sky-200 bg-sky-50/40' : 'border-slate-200'
-                    }`}
+                    } ${draggedStageId === stage.id ? 'opacity-40' : ''}`}
                   >
-                    <div className="p-3.5 border-b border-slate-100 space-y-2">
+                    {/* Cabeçalho arrastável — segurar aqui e soltar sobre outra
+                        coluna troca a posição das duas na sequência do funil.
+                        Área de drag separada dos cards de paciente abaixo, para
+                        os dois gestos nunca colidirem. */}
+                    <div
+                      draggable
+                      onDragStart={() => setDraggedStageId(stage.id)}
+                      onDragEnd={() => setDraggedStageId(null)}
+                      className="p-3.5 border-b border-slate-100 space-y-2 cursor-grab active:cursor-grabbing"
+                      title="Arraste para reordenar esta etapa no funil"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-xs text-slate-800 truncate flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: stage.color || '#64748b' }} />

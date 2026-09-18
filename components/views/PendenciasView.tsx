@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Patient, PriorityRule } from '@/lib/types';
+import { Patient, PriorityRule, Funnel } from '@/lib/types';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
+  KanbanSquare,
 } from 'lucide-react';
 
 interface PendenciasViewProps {
@@ -24,16 +25,26 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
   const { success, error, info } = useToast();
   const [patients, setPatients] = useState<Patient[]>(FALLBACK_PATIENTS);
   const [rules, setRules] = useState<PriorityRule[]>([]);
-  const [filterType, setFilterType] = useState<'todos' | 'sla' | 'revisao' | 'docs'>('todos');
+  /**
+   * Funis reais da clínica — usados para saber em qual etapa cada
+   * paciente está parado e, quando a etapa tem uma meta de prazo
+   * configurada (FunnelStage.conversionGoal.maxDaysInStage, já usada
+   * na Visão Executiva de Jornadas), comparar contra ela em vez de um
+   * limiar fixo. Sem meta configurada, usa 3 dias como referência
+   * padrão — mesmo critério já usado no Kanban de Jornadas.
+   */
+  const [funnels, setFunnels] = useState<Funnel[]>([]);
+  const [filterType, setFilterType] = useState<'todos' | 'sla' | 'revisao' | 'docs' | 'etapa'>('todos');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
       try {
-        const [pRes, rRes] = await Promise.allSettled([
+        const [pRes, rRes, sRes] = await Promise.allSettled([
           apiService.getPatients(),
           apiService.getPriorityRules(),
+          apiService.getClinicSettings(),
         ]);
         if (isMounted) {
           if (pRes.status === 'fulfilled' && pRes.value?.patients?.length) {
@@ -42,12 +53,8 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
           if (rRes.status === 'fulfilled' && rRes.value?.rules?.length) {
             setRules(rRes.value.rules);
           }
-          // Correção de UX: Promise.allSettled nunca lança para o catch
-          // externo quando uma das chamadas falha — antes isso ficava
-          // completamente silencioso (a tela só mostrava "sem
-          // pendências", indistinguível de uma falha real de rede).
-          if (pRes.status === 'rejected' || rRes.status === 'rejected') {
-            error('Falha ao carregar pendências', 'Alguns dados podem estar desatualizados. Recarregue a página.');
+          if (sRes.status === 'fulfilled') {
+            setFunnels(sRes.value.settings?.funnels || []);
           }
         }
       } catch {
@@ -65,18 +72,44 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
     };
   }, []);
 
+  const daysSince = (dateStr: string): number => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
+  /**
+   * Para um paciente com conversa ativa e vinculado a um funil, olha
+   * a etapa atual dele e diz se está "parado" (dias desde a última
+   * interação além do limite) — usando a meta real da etapa quando
+   * existir, senão o padrão de 3 dias.
+   */
+  const getStalledInfo = (patient: Patient): { isStalled: boolean; daysInStage: number; stageName: string; limitDays: number } | null => {
+    if ((patient.conversationStatus || 'active') !== 'active') return null;
+    const funnel = funnels.find((f) => f.id === patient.funnelId);
+    const stage = funnel?.stages.find((s) => s.id === patient.funnelStage);
+    if (!stage) return null;
+    const limitDays = stage.conversionGoal?.maxDaysInStage ?? 3;
+    const daysInStage = daysSince(patient.lastInteractionAt);
+    return { isStalled: daysInStage > limitDays, daysInStage, stageName: stage.name, limitDays };
+  };
+
   // Filter patients with pending issues
   const pendingPatients = patients.filter((p) => {
     const hasMissingDocs = !p.checklist.doc_enviado || !p.checklist.convenio_validado || !p.checklist.termo_assinado;
     const needsReview = p.requiresHumanReview;
     const isCriticalOrHigh = p.urgency === 'critica' || p.urgency === 'alta';
+    const stalledInfo = getStalledInfo(p);
+    const isStalledInStage = !!stalledInfo?.isStalled;
 
     if (filterType === 'sla') return isCriticalOrHigh;
     if (filterType === 'revisao') return needsReview;
     if (filterType === 'docs') return hasMissingDocs;
+    if (filterType === 'etapa') return isStalledInStage;
 
-    return hasMissingDocs || needsReview || isCriticalOrHigh;
+    return hasMissingDocs || needsReview || isCriticalOrHigh || isStalledInStage;
   });
+
+  const stalledCount = patients.filter((p) => getStalledInfo(p)?.isStalled).length;
 
   const handleResolveReview = async (patientId: string) => {
     try {
@@ -98,12 +131,12 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
             <h2 className="text-lg font-bold text-slate-900">Central de Pendências & Controle de SLA</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitoramento de casos críticos, tempos de resposta Manchester e pendências cadastrais/LGPD.
+            Monitoramento de casos críticos, tempos de resposta Manchester, pendências cadastrais/LGPD e etapas de funil paradas.
           </p>
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600 flex-wrap">
           <button
             onClick={() => setFilterType('todos')}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
@@ -119,6 +152,14 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
             }`}
           >
             SLA Crítico
+          </button>
+          <button
+            onClick={() => setFilterType('etapa')}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+              filterType === 'etapa' ? 'bg-white text-indigo-700 shadow-2xs' : 'hover:text-slate-900'
+            }`}
+          >
+            <KanbanSquare className="w-3 h-3" /> Etapa Parada {stalledCount > 0 && `(${stalledCount})`}
           </button>
           <button
             onClick={() => setFilterType('revisao')}
@@ -152,6 +193,7 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
           ) : (
             pendingPatients.map((p) => {
               const isUrgent = p.urgency === 'critica' || p.urgency === 'alta';
+              const stalledInfo = getStalledInfo(p);
 
               return (
                 <div
@@ -162,13 +204,17 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isUrgent ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {p.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-                      </div>
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                      ) : (
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isUrgent ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {p.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-2">
                           <h4 className="font-bold text-xs text-slate-900">{p.name}</h4>
@@ -201,6 +247,16 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
 
                   {/* Pending badges row */}
                   <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-[10px]">
+                    {stalledInfo?.isStalled && (
+                      <div className="flex items-center gap-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-1 rounded-md font-semibold">
+                        <KanbanSquare className="w-3 h-3 text-indigo-600" />
+                        <span>
+                          Parado há {stalledInfo.daysInStage} dia{stalledInfo.daysInStage !== 1 ? 's' : ''} em &ldquo;{stalledInfo.stageName}&rdquo;
+                          {stalledInfo.limitDays !== 3 ? ` (meta: ${stalledInfo.limitDays}d)` : ''}
+                        </span>
+                      </div>
+                    )}
+
                     {p.requiresHumanReview && (
                       <div className="flex items-center gap-1.5 bg-purple-50 text-purple-800 border border-purple-200 px-2 py-1 rounded-md font-semibold">
                         <Sparkles className="w-3 h-3 text-purple-600" />
@@ -270,3 +326,4 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
     </div>
   );
 }
+
