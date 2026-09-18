@@ -18,10 +18,8 @@ import {
   ChevronDown,
   Users,
   Phone,
-  GitBranch,
   LayoutGrid,
   BarChart3,
-  ChevronRight,
 } from 'lucide-react';
 
 interface JornadasViewProps {
@@ -56,7 +54,7 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   specialty: 'Especialidade',
 };
 
-type ViewMode = 'funil' | 'kanban' | 'timeline';
+type ViewMode = 'kanban' | 'executiva';
 const VIEW_MODE_STORAGE_KEY = 'mediflux_jornadas_view_mode';
 
 /**
@@ -98,11 +96,44 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
   const [previewPatient, setPreviewPatient] = useState<Patient | null>(null);
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
-  const [expandedFunnelStageId, setExpandedFunnelStageId] = useState<string | null>(null);
+
+  /**
+   * Visão Executiva — métricas reais calculadas a partir do histórico
+   * de transições (não do volume atual): conversão real por etapa,
+   * tempo médio até avançar, comparação com a meta configurada, e
+   * motivos de perda mais comuns. Buscado sob demanda, só quando o
+   * usuário troca para este modo (evita uma chamada extra em toda
+   * visita à tela quando ele só quer o Kanban).
+   */
+  const [analytics, setAnalytics] = useState<{
+    stages: {
+      stageId: string;
+      stageName: string;
+      enteredCount: number;
+      leftCount: number;
+      conversionPercent: number | null;
+      avgDurationDays: number | null;
+      goal: { minConversionPercent?: number; maxDaysInStage?: number } | null;
+      meetsConversionGoal: boolean | null;
+      meetsDurationGoal: boolean | null;
+    }[];
+    topLossReasons: { count: number; example: string }[];
+  } | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+
+  useEffect(() => {
+    if (viewMode !== 'executiva' || !selectedFunnelId) return;
+    setIsLoadingAnalytics(true);
+    apiService
+      .getFunnelAnalytics(selectedFunnelId)
+      .then((res) => setAnalytics(res))
+      .catch(() => setAnalytics(null))
+      .finally(() => setIsLoadingAnalytics(false));
+  }, [viewMode, selectedFunnelId]);
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(VIEW_MODE_STORAGE_KEY) : null;
-    if (stored === 'funil' || stored === 'kanban' || stored === 'timeline') setViewMode(stored);
+    if (stored === 'kanban' || stored === 'executiva') setViewMode(stored);
   }, []);
 
   const changeViewMode = (mode: ViewMode) => {
@@ -288,9 +319,8 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
         <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
           {(
             [
-              { id: 'funil' as ViewMode, label: 'Funil Real', icon: GitBranch },
               { id: 'kanban' as ViewMode, label: 'Kanban', icon: LayoutGrid },
-              { id: 'timeline' as ViewMode, label: 'Linha do Tempo', icon: BarChart3 },
+              { id: 'executiva' as ViewMode, label: 'Visão Executiva', icon: BarChart3 },
             ]
           ).map((v) => (
             <button
@@ -409,81 +439,6 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
         </div>
       ) : (
         <AnimatePresence mode="wait">
-          {viewMode === 'funil' && (
-            <motion.div key="funil" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex-1 overflow-y-auto p-5">
-              {/* Visualização "Funil Real" — cada etapa é uma faixa cuja
-                  largura reflete o volume relativo, afunilando de
-                  verdade. Taxa de conversão calculada em relação à
-                  etapa anterior. Clicar expande a lista inline. */}
-              <div className="max-w-3xl mx-auto space-y-2">
-                {stages.map((stage, idx) => {
-                  const stagePatients = funnelPatients
-                    .filter((p) => p.funnelStage === stage.id)
-                    .sort((a, b) => URGENCY_WEIGHT[a.urgency] - URGENCY_WEIGHT[b.urgency]);
-                  const widthPercent = Math.max(18, Math.round((stagePatients.length / maxStageVolume) * 100));
-                  const prevStagePatients = idx > 0 ? funnelPatients.filter((p) => p.funnelStage === stages[idx - 1].id) : null;
-                  const conversionRate = prevStagePatients && prevStagePatients.length > 0 ? Math.round((stagePatients.length / prevStagePatients.length) * 100) : null;
-                  const isExpanded = expandedFunnelStageId === stage.id;
-
-                  return (
-                    <div key={stage.id}>
-                      {conversionRate !== null && (
-                        <div className="flex items-center justify-center py-1 text-[10px] font-semibold text-slate-400">
-                          ↓ {conversionRate}% avançam
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setExpandedFunnelStageId(isExpanded ? null : stage.id)}
-                        className="w-full flex items-center gap-3 group"
-                      >
-                        <motion.div
-                          layout
-                          className="h-14 rounded-xl flex items-center justify-between px-4 shadow-2xs transition-shadow group-hover:shadow-md"
-                          style={{ width: `${widthPercent}%`, minWidth: '180px', backgroundColor: stage.color || '#0284c7' }}
-                          transition={{ type: 'spring', duration: 0.5 }}
-                        >
-                          <span className="font-bold text-white text-xs truncate drop-shadow-xs">{stage.name}</span>
-                          <span className="text-white text-sm font-bold shrink-0 ml-2">{stagePatients.length}</span>
-                        </motion.div>
-                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
-                      </button>
-
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="pt-2 pb-1 pl-4 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                              {stagePatients.length === 0 ? (
-                                <div className="text-[11px] text-slate-400 italic py-2">Nenhum paciente nesta etapa.</div>
-                              ) : (
-                                stagePatients.map((p) => (
-                                  <button
-                                    key={p.id}
-                                    onClick={() => setPreviewPatient(p)}
-                                    className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 hover:border-sky-300 transition-colors text-left"
-                                  >
-                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${URGENCY_BAR[p.urgency]}`} />
-                                    <span className="text-[11px] font-medium text-slate-800 truncate flex-1">{p.name}</span>
-                                    {daysSince(p.lastInteractionAt) > 3 && <Clock className="w-3 h-3 text-amber-500 shrink-0" />}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-
           {viewMode === 'kanban' && (
             <motion.div key="kanban" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex-1 flex gap-4 overflow-x-auto p-5">
               {stages.map((stage, stageIndex) => {
@@ -607,57 +562,98 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
             </motion.div>
           )}
 
-          {viewMode === 'timeline' && (
-            <motion.div key="timeline" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex-1 overflow-y-auto p-5">
-              {/* Linha do Tempo — 1 linha por paciente, barra horizontal
-                  proporcional a quanto tempo ele está parado na etapa
-                  atual (aproximação via lastInteractionAt; quando o
-                  histórico real de transições existir, vira mais
-                  preciso ainda). Ordenados do mais parado pro mais
-                  recente — quem precisa de atenção aparece primeiro. */}
-              <div className="max-w-4xl mx-auto space-y-1.5">
-                {[...funnelPatients]
-                  .sort((a, b) => daysSince(b.lastInteractionAt) - daysSince(a.lastInteractionAt))
-                  .map((p) => {
-                    const stage = stages.find((s) => s.id === p.funnelStage);
-                    const daysInStage = daysSince(p.lastInteractionAt);
-                    const maxDaysScale = 14; // referência visual: 14 dias = barra cheia
-                    const barPercent = Math.min(100, Math.max(6, Math.round((daysInStage / maxDaysScale) * 100)));
+          {viewMode === 'executiva' && (
+            <motion.div key="executiva" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex-1 overflow-y-auto p-5">
+              {/* Visão Executiva — dado real do histórico de transições,
+                  comparado contra as metas configuradas em Configurações.
+                  Sem meta configurada numa etapa, ela só mostra o número,
+                  sem julgamento visual (não inventamos uma meta padrão). */}
+              {isLoadingAnalytics ? (
+                <div className="text-center py-16 text-slate-400 text-xs">Calculando métricas do funil...</div>
+              ) : !analytics || analytics.stages.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 text-xs">
+                  Ainda não há histórico de movimentações suficiente neste funil para calcular métricas.
+                </div>
+              ) : (
+                <div className="max-w-3xl mx-auto space-y-4">
+                  {analytics.stages.map((s) => (
+                    <div key={s.stageId} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-slate-900">{s.stageName}</span>
+                        <span className="text-[11px] text-slate-500">
+                          {s.enteredCount} entraram • {s.leftCount} avançaram
+                        </span>
+                      </div>
 
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => setPreviewPatient(p)}
-                        className="w-full flex items-center gap-3 p-2.5 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-colors text-left"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                          {initials(p.name)}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Conversão real — só avaliada contra a meta se uma meta existir */}
+                        <div
+                          className={`p-2.5 rounded-xl border ${
+                            s.meetsConversionGoal === true
+                              ? 'bg-emerald-50 border-emerald-200'
+                              : s.meetsConversionGoal === false
+                              ? 'bg-rose-50 border-rose-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Conversão Real</div>
+                          <div
+                            className={`text-lg font-bold ${
+                              s.meetsConversionGoal === true ? 'text-emerald-700' : s.meetsConversionGoal === false ? 'text-rose-700' : 'text-slate-900'
+                            }`}
+                          >
+                            {s.conversionPercent !== null ? `${s.conversionPercent}%` : '—'}
+                          </div>
+                          {s.goal?.minConversionPercent !== undefined && (
+                            <div className="text-[10px] text-slate-400">Meta: ≥{s.goal.minConversionPercent}%</div>
+                          )}
                         </div>
-                        <div className="w-32 shrink-0 min-w-0">
-                          <div className="text-xs font-bold text-slate-900 truncate">{p.name}</div>
-                          <div className="text-[10px] text-slate-400 truncate">{stage?.name || '—'}</div>
+
+                        {/* Tempo médio na etapa — idem, só avaliado com meta configurada */}
+                        <div
+                          className={`p-2.5 rounded-xl border ${
+                            s.meetsDurationGoal === true
+                              ? 'bg-emerald-50 border-emerald-200'
+                              : s.meetsDurationGoal === false
+                              ? 'bg-rose-50 border-rose-200'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Tempo Médio</div>
+                          <div
+                            className={`text-lg font-bold ${
+                              s.meetsDurationGoal === true ? 'text-emerald-700' : s.meetsDurationGoal === false ? 'text-rose-700' : 'text-slate-900'
+                            }`}
+                          >
+                            {s.avgDurationDays !== null ? `${s.avgDurationDays}d` : '—'}
+                          </div>
+                          {s.goal?.maxDaysInStage !== undefined && <div className="text-[10px] text-slate-400">Meta: ≤{s.goal.maxDaysInStage}d</div>}
                         </div>
-                        <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden relative min-w-[80px]">
-                          <motion.div
-                            layout
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: stage?.color || '#64748b' }}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${barPercent}%` }}
-                            transition={{ type: 'spring', duration: 0.6 }}
-                          />
-                        </div>
-                        <div className={`w-20 shrink-0 text-right text-[11px] font-semibold ${daysInStage > 3 ? 'text-amber-700' : 'text-slate-500'}`}>
-                          {daysInStage === 0 ? 'Hoje' : `${daysInStage}d parado`}
-                        </div>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${URGENCY_BAR[p.urgency]}`} />
-                      </button>
-                    );
-                  })}
-                {funnelPatients.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">Nenhum paciente neste funil.</div>}
-              </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Motivos de perda agregados — só aparece se houver dado real */}
+                  {analytics.topLossReasons.length > 0 && (
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+                      <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" /> Motivos de Perda Mais Comuns
+                      </span>
+                      <div className="space-y-1.5">
+                        {analytics.topLossReasons.map((r, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-lg">
+                            <span className="text-slate-700">{r.example}</span>
+                            <span className="font-bold text-slate-500 shrink-0 ml-2">{r.count}×</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
+
         </AnimatePresence>
       )}
 

@@ -570,6 +570,31 @@ export const apiService = {
     );
   },
 
+  /**
+   * Métricas reais do funil, calculadas a partir do histórico de
+   * transições de etapa (não do volume atual, que só mostra a foto
+   * de agora): conversão real por etapa, tempo médio até avançar, e
+   * comparação com a meta configurada. Base da Visão Executiva de
+   * Jornadas.
+   */
+  async getFunnelAnalytics(funnelId: string) {
+    return authFetch<{
+      funnelId: string;
+      stages: {
+        stageId: string;
+        stageName: string;
+        enteredCount: number;
+        leftCount: number;
+        conversionPercent: number | null;
+        avgDurationDays: number | null;
+        goal: { minConversionPercent?: number; maxDaysInStage?: number } | null;
+        meetsConversionGoal: boolean | null;
+        meetsDurationGoal: boolean | null;
+      }[];
+      topLossReasons: { count: number; example: string }[];
+    }>(`/api/funnels/${encodeURIComponent(funnelId)}/analytics`);
+  },
+
   // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.
   // Rotas novas: antes não existia nenhuma tela dedicada de gestão de
   // equipe — a lista de usuários só aparecia embutida em
