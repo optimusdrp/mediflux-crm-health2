@@ -6,6 +6,7 @@ import { Patient, UrgencyLevel, Funnel, FunnelStage } from '@/lib/types';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
+import { getStalledLimitMinutes, minutesSince, formatMinutesElapsed } from '@/lib/slaRules';
 import {
   KanbanSquare,
   Plus,
@@ -79,6 +80,13 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
   const { success, error } = useToast();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [funnels, setFunnels] = useState<Funnel[]>([]);
+  /**
+   * Regras de alerta de SLA por tempo parado (segmentadas por
+   * urgência/sentimento/funil/etapa) + o limite global de fallback —
+   * usadas para calcular com precisão (minutos, não mais dias) se um
+   * paciente está "parado" na etapa atual, e destacar isso no card.
+   */
+  const [slaSettings, setSlaSettings] = useState<{ slaAlertRules: import('@/lib/types').SlaAlertRule[]; whatsappAlerts: import('@/lib/types').ClinicSettings['whatsappAlerts'] } | null>(null);
   const [selectedFunnelId, setSelectedFunnelId] = useState<string>('');
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('todas');
   const [selectedUrgency, setSelectedUrgency] = useState<string>('todas');
@@ -165,6 +173,10 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
       if (settingsRes.status === 'fulfilled') {
         const loadedFunnels = settingsRes.value.settings?.funnels || [];
         setFunnels(loadedFunnels);
+        setSlaSettings({
+          slaAlertRules: settingsRes.value.settings?.slaAlertRules || [],
+          whatsappAlerts: settingsRes.value.settings?.whatsappAlerts,
+        });
         if (loadedFunnels.length > 0 && !selectedFunnelId) {
           const defaultFunnel = loadedFunnels.find((f) => f.isDefault) || loadedFunnels[0];
           setSelectedFunnelId(defaultFunnel.id);
@@ -199,12 +211,10 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     [patients, selectedFunnelId, selectedUrgency]
   );
 
-  const daysSince = (dateStr: string): number => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
-  };
-
-  const isLossStage = (stage: FunnelStage): boolean => {
+  const stalledCount = funnelPatients.filter((p) => {
+    const limit = slaSettings ? getStalledLimitMinutes(p, slaSettings) : 240;
+    return minutesSince(p.lastInteractionAt) > limit;
+  }).length;  const isLossStage = (stage: FunnelStage): boolean => {
     if (stage.isExitStage !== undefined) return stage.isExitStage;
     const name = stage.name.toLowerCase();
     return name.includes('perdid') || name.includes('desist');
@@ -304,7 +314,6 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
     }
   };
 
-  const stalledCount = funnelPatients.filter((p) => daysSince(p.lastInteractionAt) > 3).length;
   const criticalCount = funnelPatients.filter((p) => p.urgency === 'critica' || p.urgency === 'alta').length;
   const healthyCount = funnelPatients.length - stalledCount - criticalCount > 0 ? funnelPatients.length - stalledCount - criticalCount : funnelPatients.length - Math.max(stalledCount, criticalCount);
 
@@ -396,7 +405,7 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
             </div>
           </button>
           <div className={`p-2.5 rounded-xl border ${stalledCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
-            <div className={`text-[10px] font-semibold uppercase tracking-wide ${stalledCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>🟡 Parados +3d</div>
+            <div className={`text-[10px] font-semibold uppercase tracking-wide ${stalledCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>🟡 Fora do SLA</div>
             <div className={`text-lg font-bold flex items-center gap-1 ${stalledCount > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
               <AlertTriangle className="w-3.5 h-3.5" /> {stalledCount}
             </div>
@@ -534,8 +543,9 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
                         <div className="p-4 text-center text-slate-400 text-xs italic">Nenhum paciente nesta etapa.</div>
                       ) : (
                         stagePatients.map((p) => {
-                          const daysInStage = daysSince(p.lastInteractionAt);
-                          const isStalled = daysInStage > 3;
+                          const minutesInStage = minutesSince(p.lastInteractionAt);
+                          const stalledLimitMinutes = slaSettings ? getStalledLimitMinutes(p, slaSettings) : 240;
+                          const isStalled = minutesInStage > stalledLimitMinutes;
                           const isCriticalOrHigh = p.urgency === 'critica' || p.urgency === 'alta';
 
                           return (
@@ -577,7 +587,7 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
 
                                 <div className={`text-[10px] flex items-center gap-1 ${isStalled ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
                                   <Clock className="w-3 h-3" />
-                                  <span>{daysInStage === 0 ? 'Hoje' : `há ${daysInStage} dia${daysInStage > 1 ? 's' : ''} nesta etapa`}</span>
+                                  <span>{minutesInStage < 60 ? 'Hoje' : `há ${formatMinutesElapsed(minutesInStage)} nesta etapa`}</span>
                                 </div>
 
                                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]" onClick={(e) => e.stopPropagation()}>

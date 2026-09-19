@@ -236,6 +236,35 @@ export interface Appointment {
   };
 }
 
+/**
+ * Regra de alerta de SLA por tempo parado — generaliza o antigo
+ * campo único ClinicSettings.whatsappAlerts.slaAlertMinutes (um
+ * limite global, sem segmentação) e complementa PriorityRule (que já
+ * cobria SLA por cor Manchester, mas nunca era de fato usada para
+ * detectar pendências). Cada regra combina até 4 dimensões:
+ * urgência, sentimento, funil e etapa — todas opcionais; uma regra
+ * sem nenhuma dimensão preenchida vale como "padrão geral" (fallback
+ * quando nenhuma regra mais específica combina com o paciente).
+ * A regra mais específica que combina com um paciente é a que vale
+ * (mais dimensões preenchidas = mais específica).
+ */
+export interface SlaAlertRule {
+  id: string;
+  clinicId: string;
+  name: string;
+  /** Tempo máximo, em minutos, que um paciente pode ficar sem interação antes de contar como pendência. */
+  maxMinutesStalled: number;
+  /** Restringe a regra a uma urgência específica — omitido = vale para qualquer urgência. */
+  urgency?: UrgencyLevel;
+  /** Restringe a regra a um sentimento identificado na primeira mensagem — omitido = vale para qualquer sentimento (ou nenhum identificado). */
+  sentiment?: 'positivo' | 'neutro' | 'negativo' | 'urgente';
+  /** Restringe a regra a um funil específico — omitido = vale para qualquer funil. */
+  funnelId?: string;
+  /** Restringe a regra a uma etapa específica (dentro do funil acima, se informado) — omitido = vale para qualquer etapa. */
+  stageId?: string;
+  enabled: boolean;
+}
+
 export interface PriorityRule {
   id: string;
   clinicId: string;
@@ -363,8 +392,21 @@ export interface FunnelStage {
   conversionGoal?: {
     /** Percentual mínimo esperado de pacientes que avançam desta etapa para a seguinte (0-100). */
     minConversionPercent?: number;
-    /** Prazo máximo esperado, em dias, para um paciente permanecer nesta etapa antes de avançar. */
+    /**
+     * Prazo máximo esperado, em dias, para um paciente permanecer
+     * nesta etapa antes de avançar. Mantido por compatibilidade com
+     * metas já configuradas; para prazos mais curtos e precisos
+     * (minutos/horas), use maxMinutesInStage — quando ambos estão
+     * preenchidos, maxMinutesInStage tem prioridade na comparação.
+     */
     maxDaysInStage?: number;
+    /**
+     * Prazo máximo esperado, em MINUTOS, para um paciente permanecer
+     * nesta etapa. Granularidade fina — cobre o caso de uma etapa
+     * crítica que não pode ficar parada nem por 15 minutos, algo que
+     * maxDaysInStage (mínimo de 1 dia inteiro) nunca conseguia expressar.
+     */
+    maxMinutesInStage?: number;
   };
   /**
    * Automação de entrada — dispara uma mensagem automática ao
@@ -414,8 +456,16 @@ export interface ClinicSettings {
     slaBreachDispatches: boolean;
     criticalTriageAlerts: boolean;
     emergencyNumber?: string;
+    /** Limite global (minutos) — usado como padrão de última instância quando nenhuma regra em slaAlertRules combina com o paciente. */
     slaAlertMinutes?: number;
   };
+  /**
+   * Regras de alerta de SLA por tempo parado, segmentadas por
+   * urgência, sentimento, funil e/ou etapa — substituem o limite
+   * único e global de whatsappAlerts.slaAlertMinutes quando pelo
+   * menos uma regra combina com o paciente. Ver SlaAlertRule.
+   */
+  slaAlertRules?: SlaAlertRule[];
   globalNotifications: {
     enableSound: boolean;
     enablePopups: boolean;

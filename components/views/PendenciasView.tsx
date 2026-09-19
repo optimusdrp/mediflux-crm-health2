@@ -5,6 +5,7 @@ import { Patient, PriorityRule, Funnel } from '@/lib/types';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
+import { resolveSlaRuleForPatient, getStalledLimitMinutes, minutesSince, formatMinutesElapsed } from '@/lib/slaRules';
 import {
   ClockAlert,
   AlertTriangle,
@@ -34,6 +35,7 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
    * padrão — mesmo critério já usado no Kanban de Jornadas.
    */
   const [funnels, setFunnels] = useState<Funnel[]>([]);
+  const [slaSettings, setSlaSettings] = useState<{ slaAlertRules: import('@/lib/types').SlaAlertRule[]; whatsappAlerts: import('@/lib/types').ClinicSettings['whatsappAlerts'] } | null>(null);
   const [filterType, setFilterType] = useState<'todos' | 'sla' | 'revisao' | 'docs' | 'etapa'>('todos');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,6 +57,10 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
           }
           if (sRes.status === 'fulfilled') {
             setFunnels(sRes.value.settings?.funnels || []);
+            setSlaSettings({
+              slaAlertRules: sRes.value.settings?.slaAlertRules || [],
+              whatsappAlerts: sRes.value.settings?.whatsappAlerts,
+            });
           }
         }
       } catch {
@@ -72,25 +78,28 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
     };
   }, []);
 
-  const daysSince = (dateStr: string): number => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
-  };
-
   /**
-   * Para um paciente com conversa ativa e vinculado a um funil, olha
-   * a etapa atual dele e diz se está "parado" (dias desde a última
-   * interação além do limite) — usando a meta real da etapa quando
-   * existir, senão o padrão de 3 dias.
+   * Para um paciente com conversa ativa e vinculado a um funil, diz
+   * se está "parado" além do limite tolerável — agora com precisão
+   * de MINUTOS (antes só dias inteiros, o que escondia atrasos de
+   * poucas horas). Prioridade de onde vem o limite: 1) a regra de
+   * SlaAlertRule mais específica que combina com o paciente
+   * (urgência/sentimento/funil/etapa); 2) a meta de prazo da própria
+   * etapa (FunnelStage.conversionGoal), se configurada; 3) o padrão
+   * de 4 horas (240 min).
    */
-  const getStalledInfo = (patient: Patient): { isStalled: boolean; daysInStage: number; stageName: string; limitDays: number } | null => {
+  const getStalledInfo = (patient: Patient): { isStalled: boolean; minutesInStage: number; stageName: string; limitMinutes: number; ruleName?: string } | null => {
     if ((patient.conversationStatus || 'active') !== 'active') return null;
     const funnel = funnels.find((f) => f.id === patient.funnelId);
     const stage = funnel?.stages.find((s) => s.id === patient.funnelStage);
     if (!stage) return null;
-    const limitDays = stage.conversionGoal?.maxDaysInStage ?? 3;
-    const daysInStage = daysSince(patient.lastInteractionAt);
-    return { isStalled: daysInStage > limitDays, daysInStage, stageName: stage.name, limitDays };
+
+    const matchedRule = slaSettings ? resolveSlaRuleForPatient(patient, slaSettings.slaAlertRules) : null;
+    const stageGoalMinutes = stage.conversionGoal?.maxMinutesInStage ?? (stage.conversionGoal?.maxDaysInStage !== undefined ? stage.conversionGoal.maxDaysInStage * 24 * 60 : undefined);
+    const limitMinutes = matchedRule?.maxMinutesStalled ?? stageGoalMinutes ?? (slaSettings ? getStalledLimitMinutes(patient, slaSettings) : 240);
+
+    const minutesInStage = minutesSince(patient.lastInteractionAt);
+    return { isStalled: minutesInStage > limitMinutes, minutesInStage, stageName: stage.name, limitMinutes, ruleName: matchedRule?.name };
   };
 
   // Filter patients with pending issues
@@ -251,8 +260,8 @@ export function PendenciasView({ onSelectPatient }: PendenciasViewProps) {
                       <div className="flex items-center gap-1.5 bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-1 rounded-md font-semibold">
                         <KanbanSquare className="w-3 h-3 text-indigo-600" />
                         <span>
-                          Parado há {stalledInfo.daysInStage} dia{stalledInfo.daysInStage !== 1 ? 's' : ''} em &ldquo;{stalledInfo.stageName}&rdquo;
-                          {stalledInfo.limitDays !== 3 ? ` (meta: ${stalledInfo.limitDays}d)` : ''}
+                          Parado há {formatMinutesElapsed(stalledInfo.minutesInStage)} em &ldquo;{stalledInfo.stageName}&rdquo;
+                          {stalledInfo.ruleName ? ` — regra: ${stalledInfo.ruleName}` : ` (limite: ${formatMinutesElapsed(stalledInfo.limitMinutes)})`}
                         </span>
                       </div>
                     )}

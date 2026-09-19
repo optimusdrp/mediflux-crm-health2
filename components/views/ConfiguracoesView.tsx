@@ -15,6 +15,8 @@ import {
   Role,
   TabId,
   SensitiveAction,
+  SlaAlertRule,
+  UrgencyLevel,
 } from '@/lib/types';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +57,7 @@ import {
   Palette,
   Clock,
   Phone,
+  ClockAlert,
   Key,
   Volume2,
   Zap,
@@ -475,6 +478,82 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
    * texto), que só cobria o funil padrão.
    */
   const [isTogglingExitStage, setIsTogglingExitStage] = useState<string | null>(null);
+
+  /**
+   * Regras de Alerta de SLA por tempo parado — generalizam o antigo
+   * campo único whatsappAlerts.slaAlertMinutes (um limite global, sem
+   * segmentação). Cada regra combina até 4 dimensões opcionais
+   * (urgência, sentimento, funil, etapa); a mais específica que
+   * combina com um paciente é a usada — resolução real em
+   * lib/slaRules.ts, aplicada em Jornadas e Pendências.
+   */
+  const [editingSlaRule, setEditingSlaRule] = useState<Partial<SlaAlertRule> | null>(null);
+  const [isSavingSlaRule, setIsSavingSlaRule] = useState(false);
+  const [pendingSlaRuleDeleteId, setPendingSlaRuleDeleteId] = useState<string | null>(null);
+
+  const openNewSlaRuleModal = () => {
+    setEditingSlaRule({ name: '', maxMinutesStalled: 60, enabled: true });
+  };
+
+  const handleSaveSlaRule = async () => {
+    if (!settings || !editingSlaRule?.name?.trim() || !editingSlaRule.maxMinutesStalled) return;
+    setIsSavingSlaRule(true);
+    try {
+      const currentRules = settings.slaAlertRules || [];
+      const isNew = !editingSlaRule.id;
+      const savedRule: SlaAlertRule = {
+        id: editingSlaRule.id || `sla_rule_${Date.now()}`,
+        clinicId: settings.clinicId,
+        name: editingSlaRule.name.trim(),
+        maxMinutesStalled: Number(editingSlaRule.maxMinutesStalled),
+        urgency: editingSlaRule.urgency,
+        sentiment: editingSlaRule.sentiment,
+        funnelId: editingSlaRule.funnelId,
+        stageId: editingSlaRule.stageId,
+        enabled: editingSlaRule.enabled ?? true,
+      };
+      const updatedRules = isNew ? [...currentRules, savedRule] : currentRules.map((r) => (r.id === savedRule.id ? savedRule : r));
+      const res = await apiService.saveClinicSettings({ slaAlertRules: updatedRules });
+      setSettings((prev) => (prev ? { ...prev, slaAlertRules: res.settings.slaAlertRules } : prev));
+      success('Regra de SLA Salva', `"${savedRule.name}" foi ${isNew ? 'criada' : 'atualizada'}.`);
+      setEditingSlaRule(null);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao salvar regra de SLA';
+      error('Falha ao salvar', msg);
+    } finally {
+      setIsSavingSlaRule(false);
+    }
+  };
+
+  const handleToggleSlaRuleEnabled = async (rule: SlaAlertRule) => {
+    if (!settings) return;
+    try {
+      const updatedRules = (settings.slaAlertRules || []).map((r) => (r.id === rule.id ? { ...r, enabled: !r.enabled } : r));
+      const res = await apiService.saveClinicSettings({ slaAlertRules: updatedRules });
+      setSettings((prev) => (prev ? { ...prev, slaAlertRules: res.settings.slaAlertRules } : prev));
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao atualizar regra';
+      error('Falha ao atualizar', msg);
+    }
+  };
+
+  const handleDeleteSlaRule = async () => {
+    if (!settings || !pendingSlaRuleDeleteId) return;
+    try {
+      const updatedRules = (settings.slaAlertRules || []).filter((r) => r.id !== pendingSlaRuleDeleteId);
+      const res = await apiService.saveClinicSettings({ slaAlertRules: updatedRules });
+      setSettings((prev) => (prev ? { ...prev, slaAlertRules: res.settings.slaAlertRules } : prev));
+      success('Regra Removida', 'A regra de SLA foi excluída.');
+      setPendingSlaRuleDeleteId(null);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Erro ao excluir regra';
+      error('Falha ao excluir', msg);
+    }
+  };
+
+  const URGENCY_LABELS_PT: Record<UrgencyLevel, string> = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+  const SENTIMENT_LABELS_PT: Record<string, string> = { positivo: 'Positivo', neutro: 'Neutro', negativo: 'Negativo', urgente: 'Urgente' };
+
   const handleToggleExitStage = async (funnelId: string, stageId: string, currentValue: boolean | undefined) => {
     setIsTogglingExitStage(stageId);
     try {
@@ -2141,6 +2220,7 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
           {/* SUBTAB 3: ALERTAS WHATSAPP & SLA */}
           {/* ========================================================================= */}
           {activeSubTab === 3 && (
+            <>
             <div className="space-y-6 text-xs">
               <div className="flex items-center justify-between">
                 <div>
@@ -2173,7 +2253,7 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Tempo de Escalação de SLA (Minutos)</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Limite Padrão Geral (Minutos)</label>
                     <input
                       type="number"
                       value={settings?.whatsappAlerts.slaAlertMinutes || 15}
@@ -2187,7 +2267,78 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                       }}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono"
                     />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Usado quando nenhuma regra específica abaixo se aplica ao paciente.
+                    </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Regras de Alerta de SLA Segmentadas — a peça que faltava:
+                  antes só existia esse limite único e global. Agora dá para
+                  configurar, por exemplo, "15 minutos para pacientes com
+                  urgência crítica" ou "10 minutos quando o sentimento
+                  identificado for urgente", sem afetar o restante da fila. */}
+              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-slate-900">
+                      <ClockAlert className="w-4 h-4 text-indigo-600" />
+                      Regras de Alerta de SLA Segmentadas
+                    </div>
+                    <p className="text-slate-500 mt-0.5">
+                      Defina limites diferentes por urgência, sentimento, funil ou etapa. A regra mais específica que combinar com o paciente é a usada — sem nenhuma regra aplicável, vale o Limite Padrão Geral acima.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openNewSlaRuleModal}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Nova Regra
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {(settings?.slaAlertRules || []).length === 0 ? (
+                    <p className="text-slate-400 italic py-2">Nenhuma regra segmentada configurada ainda — usando só o limite padrão geral.</p>
+                  ) : (
+                    (settings?.slaAlertRules || []).map((rule) => (
+                      <div key={rule.id} className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 flex items-center gap-2">
+                            <span className="truncate">{rule.name}</span>
+                            <span className="shrink-0 px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-mono text-[10px]">{rule.maxMinutesStalled} min</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {rule.urgency && <span className="px-1.5 py-0.2 bg-slate-100 rounded">Urgência: {URGENCY_LABELS_PT[rule.urgency]}</span>}
+                            {rule.sentiment && <span className="px-1.5 py-0.2 bg-slate-100 rounded">Sentimento: {SENTIMENT_LABELS_PT[rule.sentiment]}</span>}
+                            {rule.funnelId && <span className="px-1.5 py-0.2 bg-slate-100 rounded">Funil: {(settings?.funnels || []).find((f) => f.id === rule.funnelId)?.name || rule.funnelId}</span>}
+                            {rule.stageId && (
+                              <span className="px-1.5 py-0.2 bg-slate-100 rounded">
+                                Etapa: {(settings?.funnels || []).flatMap((f) => f.stages).find((s) => s.id === rule.stageId)?.name || rule.stageId}
+                              </span>
+                            )}
+                            {!rule.urgency && !rule.sentiment && !rule.funnelId && !rule.stageId && <span className="italic">Regra geral (sem restrição de dimensão)</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleToggleSlaRuleEnabled(rule)}
+                            className={`relative w-9 h-5 rounded-full transition-colors ${rule.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                            title={rule.enabled ? 'Desabilitar regra' : 'Habilitar regra'}
+                          >
+                            <span className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${rule.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </button>
+                          <button onClick={() => setEditingSlaRule(rule)} className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => setPendingSlaRuleDeleteId(rule.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -2254,6 +2405,130 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                 </div>
               </div>
             </div>
+
+            {/* Modal de criar/editar Regra de SLA Segmentada */}
+            {editingSlaRule && (
+              <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onClick={() => !isSavingSlaRule && setEditingSlaRule(null)}>
+                <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-slate-900 text-sm">{editingSlaRule.id ? 'Editar' : 'Nova'} Regra de SLA</h4>
+                    <button onClick={() => setEditingSlaRule(null)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Nome da regra</label>
+                    <input
+                      type="text"
+                      placeholder="Ex.: Crítico sem resposta"
+                      value={editingSlaRule.name || ''}
+                      onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Limite máximo parado (minutos)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editingSlaRule.maxMinutesStalled ?? ''}
+                      onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, maxMinutesStalled: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Urgência (opcional)</label>
+                      <select
+                        value={editingSlaRule.urgency || ''}
+                        onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, urgency: (e.target.value || undefined) as UrgencyLevel | undefined }))}
+                        className="w-full px-2.5 py-2 border border-slate-300 rounded-xl bg-white"
+                      >
+                        <option value="">Qualquer urgência</option>
+                        {(['critica', 'alta', 'media', 'baixa'] as UrgencyLevel[]).map((u) => (
+                          <option key={u} value={u}>{URGENCY_LABELS_PT[u]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Sentimento (opcional)</label>
+                      <select
+                        value={editingSlaRule.sentiment || ''}
+                        onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, sentiment: (e.target.value || undefined) as SlaAlertRule['sentiment'] }))}
+                        className="w-full px-2.5 py-2 border border-slate-300 rounded-xl bg-white"
+                      >
+                        <option value="">Qualquer sentimento</option>
+                        {Object.entries(SENTIMENT_LABELS_PT).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Funil (opcional)</label>
+                      <select
+                        value={editingSlaRule.funnelId || ''}
+                        onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, funnelId: e.target.value || undefined, stageId: undefined }))}
+                        className="w-full px-2.5 py-2 border border-slate-300 rounded-xl bg-white"
+                      >
+                        <option value="">Qualquer funil</option>
+                        {(settings?.funnels || []).map((f) => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Etapa (opcional)</label>
+                      <select
+                        value={editingSlaRule.stageId || ''}
+                        disabled={!editingSlaRule.funnelId}
+                        onChange={(e) => setEditingSlaRule((prev) => ({ ...prev, stageId: e.target.value || undefined }))}
+                        className="w-full px-2.5 py-2 border border-slate-300 rounded-xl bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        <option value="">Qualquer etapa</option>
+                        {(settings?.funnels || []).find((f) => f.id === editingSlaRule.funnelId)?.stages.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button onClick={() => setEditingSlaRule(null)} disabled={isSavingSlaRule} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold disabled:opacity-50">
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleSaveSlaRule}
+                      disabled={isSavingSlaRule || !editingSlaRule.name?.trim() || !editingSlaRule.maxMinutesStalled}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-40 transition-colors"
+                    >
+                      {isSavingSlaRule ? 'Salvando...' : 'Salvar Regra'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Confirmação de exclusão de regra de SLA */}
+            {pendingSlaRuleDeleteId && (
+              <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+                  <h4 className="font-bold text-slate-900 text-sm">Excluir esta regra de SLA?</h4>
+                  <p className="text-slate-500">Pacientes que dependiam dela passam a usar o Limite Padrão Geral (ou outra regra que ainda combine).</p>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button onClick={() => setPendingSlaRuleDeleteId(null)} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold">
+                      Cancelar
+                    </button>
+                    <button onClick={handleDeleteSlaRule} className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition-colors">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            </>
           )}
 
           {/* ========================================================================= */}
