@@ -6,6 +6,7 @@ export type TabId =
   | 'atendimentos'
   | 'jornadas'
   | 'agenda'
+  | 'contatos'
   | 'pendencias'
   | 'automacoes'
   | 'indicadores'
@@ -235,6 +236,50 @@ export interface ChatMessage {
     suggestedReply?: string;
     clinicalSignals?: string[];
   };
+}
+
+/**
+ * Contato — registro central que cobre os 3 tipos que a Central de
+ * Contatos exibe em abas separadas: paciente (vinculado a um Patient
+ * já existente), lead (pessoa interessada, ainda sem virar paciente)
+ * e outro (qualquer contato fora desses dois — fornecedor, parceiro,
+ * etc.). Nunca duplica dados de Patient: quando type === 'paciente',
+ * name/phone vêm do Patient vinculado (patientId), não são
+ * armazenados de novo aqui.
+ *
+ * Duplicidade: como mais de uma pessoa pode compartilhar o mesmo
+ * telefone, a identidade de um contato não pode ser só o telefone —
+ * a checagem de duplicado é por nome + telefone normalizados juntos
+ * (mesmo nome E mesmo telefone), nunca telefone sozinho.
+ */
+export interface Contact {
+  id: string;
+  clinicId: string;
+  type: 'paciente' | 'lead' | 'outro';
+  /** Preenchido só quando type === 'paciente' — o registro de Patient é a fonte de verdade para nome/telefone/etc. desse contato. */
+  patientId?: string;
+  /** Preenchido para type 'lead' ou 'outro' — para 'paciente', use o nome do Patient vinculado. */
+  name?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  /** Só relevante para leads — mesma escala de LeadQualificationResult.score (0-100). */
+  leadScore?: number;
+  /** Só relevante para leads — em que ponto do processo de virar paciente ele está. */
+  leadStatus?: 'novo' | 'em_contato' | 'qualificado' | 'convertido' | 'perdido';
+  tags?: string[];
+  createdAt: string;
+  createdByUserId?: string;
+}
+
+/** Grupo de contatos (pacientes, leads e/ou outros juntos) — ex.: "Convênio Unimed", "Leads de Instagram". */
+export interface ContactGroup {
+  id: string;
+  clinicId: string;
+  name: string;
+  description?: string;
+  contactIds: string[];
+  createdAt: string;
 }
 
 export interface Appointment {

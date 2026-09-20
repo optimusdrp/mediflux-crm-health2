@@ -21,6 +21,8 @@ import {
   LeadQualificationResult,
   SentimentAnalysisResult,
   Role,
+  Contact,
+  ContactGroup,
   TabId,
   SensitiveAction,
   Funnel,
@@ -614,6 +616,78 @@ export const apiService = {
     }>(`/api/funnels/${encodeURIComponent(funnelId)}/analytics`);
   },
 
+  // 11.5 Central de Contatos — pacientes, leads e outros contatos
+  // unificados. Pacientes aparecem automaticamente (a partir do
+  // cadastro real de Patient); leads e outros são criados/editados
+  // por aqui, com checagem de duplicidade por nome + telefone juntos
+  // (nunca telefone sozinho, já que mais de uma pessoa pode
+  // compartilhar o mesmo número).
+  async getContacts() {
+    return authFetch<{ contacts: Contact[] }>("/api/contacts");
+  },
+
+  async createContact(payload: {
+    type: 'lead' | 'outro';
+    name: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    leadScore?: number;
+    leadStatus?: Contact['leadStatus'];
+    tags?: string[];
+  }) {
+    return authFetch<{ contact: Contact }>("/api/contacts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateContact(payload: {
+    id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    leadScore?: number;
+    leadStatus?: Contact['leadStatus'];
+    tags?: string[];
+  }) {
+    return authFetch<{ contact: Contact }>("/api/contacts", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteContact(id: string) {
+    return authFetch<{ success: boolean }>(`/api/contacts?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getContactGroups() {
+    return authFetch<{ groups: ContactGroup[] }>("/api/contact-groups");
+  },
+
+  async createContactGroup(payload: { name: string; description?: string; contactIds?: string[] }) {
+    return authFetch<{ group: ContactGroup }>("/api/contact-groups", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateContactGroup(payload: { id: string; name?: string; description?: string; contactIds?: string[] }) {
+    return authFetch<{ success: boolean }>("/api/contact-groups", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteContactGroup(id: string) {
+    return authFetch<{ success: boolean }>(`/api/contact-groups?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  },
+
   // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.
   // Rotas novas: antes não existia nenhuma tela dedicada de gestão de
   // equipe — a lista de usuários só aparecia embutida em
@@ -655,6 +729,7 @@ export const apiService = {
       body: JSON.stringify(payload),
     });
   },
+
 
   // 12. Webhooks
   async getWebhooks() {

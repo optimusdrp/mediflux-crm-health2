@@ -1,0 +1,482 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Contact } from '@/lib/types';
+import { apiService } from '@/lib/services/api';
+import { useToast } from '@/contexts/ToastContext';
+import {
+  Users,
+  UserPlus,
+  Search,
+  Phone,
+  Mail,
+  Edit3,
+  Trash2,
+  X,
+  Sparkles,
+  Tag,
+  ArrowRight,
+} from 'lucide-react';
+
+interface ContatosViewProps {
+  onSelectPatient: (id: string) => void;
+}
+
+type ContactTab = 'paciente' | 'lead' | 'outro';
+
+const TAB_LABELS: Record<ContactTab, string> = {
+  paciente: 'Pacientes',
+  lead: 'Leads',
+  outro: 'Outros Contatos',
+};
+
+const LEAD_STATUS_LABELS: Record<string, string> = {
+  novo: 'Novo',
+  em_contato: 'Em Contato',
+  qualificado: 'Qualificado',
+  convertido: 'Convertido',
+  perdido: 'Perdido',
+};
+
+const LEAD_STATUS_COLORS: Record<string, string> = {
+  novo: 'bg-slate-100 text-slate-700',
+  em_contato: 'bg-sky-100 text-sky-700',
+  qualificado: 'bg-amber-100 text-amber-800',
+  convertido: 'bg-emerald-100 text-emerald-700',
+  perdido: 'bg-rose-100 text-rose-700',
+};
+
+interface ContactFormState {
+  name: string;
+  phone: string;
+  email: string;
+  notes: string;
+  leadStatus: string;
+  tags: string;
+}
+
+const EMPTY_FORM: ContactFormState = { name: '', phone: '', email: '', notes: '', leadStatus: 'novo', tags: '' };
+
+/**
+ * Central de Contatos — unifica pacientes (Patient, refletido
+ * automaticamente), leads (interessados que ainda não viraram
+ * pacientes) e outros contatos (fornecedores, parceiros, etc.) numa
+ * única tela com 3 abas. Antes disso, "lead" era só um campo dentro
+ * de Patient (leadScore), misturado com pacientes reais, sem
+ * distinção nem lugar próprio para gerenciar.
+ */
+export function ContatosView({ onSelectPatient }: ContatosViewProps) {
+  const { success, error } = useToast();
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ContactTab>('paciente');
+  const [search, setSearch] = useState('');
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<ContactFormState>(EMPTY_FORM);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editForm, setEditForm] = useState<ContactFormState>(EMPTY_FORM);
+
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const fetchContacts = async () => {
+    setIsLoading(true);
+    try {
+      const res = await apiService.getContacts();
+      setContacts(res.contacts || []);
+    } catch (err: any) {
+      error('Erro ao carregar contatos', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchContacts();
+  }, []);
+
+  const tabCounts = useMemo(() => {
+    return {
+      paciente: contacts.filter((c) => c.type === 'paciente').length,
+      lead: contacts.filter((c) => c.type === 'lead').length,
+      outro: contacts.filter((c) => c.type === 'outro').length,
+    };
+  }, [contacts]);
+
+  const filteredContacts = useMemo(() => {
+    return contacts
+      .filter((c) => c.type === activeTab)
+      .filter((c) => {
+        if (!search.trim()) return true;
+        const term = search.toLowerCase();
+        return (c.name || '').toLowerCase().includes(term) || (c.phone || '').includes(search);
+      });
+  }, [contacts, activeTab, search]);
+
+  const openCreateModal = () => {
+    setCreateForm(EMPTY_FORM);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCreate = async () => {
+    if (!createForm.name.trim()) {
+      error('Nome obrigatório', 'Informe o nome do contato.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await apiService.createContact({
+        type: activeTab === 'paciente' ? 'lead' : (activeTab as 'lead' | 'outro'),
+        name: createForm.name.trim(),
+        phone: createForm.phone.trim() || undefined,
+        email: createForm.email.trim() || undefined,
+        notes: createForm.notes.trim() || undefined,
+        leadStatus: activeTab === 'lead' ? (createForm.leadStatus as Contact['leadStatus']) : undefined,
+        tags: createForm.tags ? createForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      });
+      setContacts((prev) => [...prev, res.contact]);
+      success('Contato Criado', `"${res.contact.name}" foi adicionado.`);
+      setIsCreateModalOpen(false);
+    } catch (err: any) {
+      error('Falha ao criar contato', err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openEditModal = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditForm({
+      name: contact.name || '',
+      phone: contact.phone || '',
+      email: contact.email || '',
+      notes: contact.notes || '',
+      leadStatus: contact.leadStatus || 'novo',
+      tags: (contact.tags || []).join(', '),
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingContact || !editForm.name.trim()) return;
+    setIsSaving(true);
+    try {
+      const res = await apiService.updateContact({
+        id: editingContact.id,
+        name: editForm.name.trim(),
+        phone: editForm.phone.trim() || undefined,
+        email: editForm.email.trim() || undefined,
+        notes: editForm.notes.trim() || undefined,
+        leadStatus: editingContact.type === 'lead' ? (editForm.leadStatus as Contact['leadStatus']) : undefined,
+        tags: editForm.tags ? editForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      });
+      setContacts((prev) => prev.map((c) => (c.id === res.contact.id ? res.contact : c)));
+      success('Contato Atualizado', 'As alterações foram salvas.');
+      setEditingContact(null);
+    } catch (err: any) {
+      error('Falha ao atualizar contato', err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDeleteId) return;
+    try {
+      await apiService.deleteContact(pendingDeleteId);
+      setContacts((prev) => prev.filter((c) => c.id !== pendingDeleteId));
+      success('Contato Removido', 'O contato foi excluído.');
+      setPendingDeleteId(null);
+    } catch (err: any) {
+      error('Falha ao excluir contato', err.message);
+      setPendingDeleteId(null);
+    }
+  };
+
+  const initials = (name?: string) =>
+    (name || '?')
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-sky-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Central de Contatos</h2>
+            <p className="text-xs text-slate-500">Pacientes, leads e outros contatos, tudo num só lugar.</p>
+          </div>
+        </div>
+        {activeTab !== 'paciente' && (
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Novo {activeTab === 'lead' ? 'Lead' : 'Contato'}
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+        {(['paciente', 'lead', 'outro'] as ContactTab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+              activeTab === tab ? 'bg-white text-sky-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {TAB_LABELS[tab]}
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === tab ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'}`}>
+              {tabCounts[tab]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+        <input
+          type="text"
+          placeholder="Buscar por nome ou telefone..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-8 pr-3 py-1.5 w-full bg-white border border-slate-200 rounded-lg text-xs focus:outline-hidden focus:ring-1 focus:ring-sky-500"
+        />
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="text-center py-16 text-slate-400 text-xs">Carregando contatos...</div>
+      ) : filteredContacts.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 text-xs">
+          Nenhum contato nesta aba{search ? ' para essa busca' : ''}.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredContacts.map((contact) => (
+            <div key={contact.id} className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {initials(contact.name)}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-slate-900 truncate">{contact.name}</span>
+                    {contact.type === 'lead' && contact.leadStatus && (
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0 ${LEAD_STATUS_COLORS[contact.leadStatus]}`}>
+                        {LEAD_STATUS_LABELS[contact.leadStatus]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
+                    {contact.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {contact.phone}
+                      </span>
+                    )}
+                    {contact.email && (
+                      <span className="flex items-center gap-1 truncate">
+                        <Mail className="w-3 h-3 shrink-0" /> {contact.email}
+                      </span>
+                    )}
+                  </div>
+                  {contact.tags && contact.tags.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      {contact.tags.map((tag) => (
+                        <span key={tag} className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] flex items-center gap-0.5">
+                          <Tag className="w-2.5 h-2.5" /> {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                {contact.type === 'paciente' && contact.patientId ? (
+                  <button
+                    onClick={() => onSelectPatient(contact.patientId!)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 text-sky-700 rounded-lg text-[11px] font-bold hover:bg-sky-100 transition-colors"
+                  >
+                    Abrir Atendimento <ArrowRight className="w-3 h-3" />
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={() => openEditModal(contact)} className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors">
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setPendingDeleteId(contact.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal de criar contato */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onClick={() => !isSaving && setIsCreateModalOpen(false)}>
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-3 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-sky-600" /> Novo {activeTab === 'lead' ? 'Lead' : 'Contato'}
+              </h4>
+              <button onClick={() => setIsCreateModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ContactFormFields form={createForm} setForm={setCreateForm} showLeadStatus={activeTab === 'lead'} />
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setIsCreateModalOpen(false)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={isSaving || !createForm.name.trim()}
+                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs disabled:opacity-40 transition-colors"
+              >
+                {isSaving ? 'Salvando...' : 'Criar Contato'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de editar contato */}
+      {editingContact && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onClick={() => !isSaving && setEditingContact(null)}>
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-3 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-900 text-sm">Editar Contato</h4>
+              <button onClick={() => setEditingContact(null)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ContactFormFields form={editForm} setForm={setEditForm} showLeadStatus={editingContact.type === 'lead'} />
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEditingContact(null)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving || !editForm.name.trim()}
+                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs disabled:opacity-40 transition-colors"
+              >
+                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de exclusão */}
+      {pendingDeleteId && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+            <h4 className="font-bold text-slate-900 text-sm">Excluir este contato?</h4>
+            <p className="text-slate-500 text-xs">Esta ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setPendingDeleteId(null)} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs">
+                Cancelar
+              </button>
+              <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors">
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContactFormFields({
+  form,
+  setForm,
+  showLeadStatus,
+}: {
+  form: ContactFormState;
+  setForm: React.Dispatch<React.SetStateAction<ContactFormState>>;
+  showLeadStatus: boolean;
+}) {
+  return (
+    <div className="space-y-3 text-xs">
+      <div>
+        <label className="block font-semibold text-slate-600 mb-1">Nome</label>
+        <input
+          type="text"
+          value={form.name}
+          onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+          className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block font-semibold text-slate-600 mb-1">Telefone</label>
+          <input
+            type="text"
+            value={form.phone}
+            onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+          />
+        </div>
+        <div>
+          <label className="block font-semibold text-slate-600 mb-1">E-mail</label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+          />
+        </div>
+      </div>
+      {showLeadStatus && (
+        <div>
+          <label className="block font-semibold text-slate-600 mb-1">Status do Lead</label>
+          <select
+            value={form.leadStatus}
+            onChange={(e) => setForm((prev) => ({ ...prev, leadStatus: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+          >
+            {Object.entries(LEAD_STATUS_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div>
+        <label className="block font-semibold text-slate-600 mb-1">Tags (separadas por vírgula)</label>
+        <input
+          type="text"
+          placeholder="Ex.: instagram, urgente"
+          value={form.tags}
+          onChange={(e) => setForm((prev) => ({ ...prev, tags: e.target.value }))}
+          className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+        />
+      </div>
+      <div>
+        <label className="block font-semibold text-slate-600 mb-1">Notas</label>
+        <textarea
+          rows={2}
+          value={form.notes}
+          onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+          className="w-full px-3 py-2 border border-slate-300 rounded-xl resize-none"
+        />
+      </div>
+    </div>
+  );
+}
