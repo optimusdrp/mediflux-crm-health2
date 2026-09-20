@@ -1,0 +1,74 @@
+2026-09-20T12:56:09.524Z [INFO]: # Build environment configured with Standard build compute type: 8GiB Memory, 4vCPUs, 128GB Disk Space
+2026-09-20T12:56:09.970Z [INFO]: # Cloning repository: git@github.com:optimusdrp/mediflux-crm-health2.git
+2026-09-20T12:56:10.677Z [INFO]: 
+2026-09-20T12:56:10.678Z [INFO]: Cloning into 'mediflux-crm-health2'...
+2026-09-20T12:56:10.678Z [INFO]: # Switching to commit: 7a7627708f56080993fbe6cfac57e2efe4be6282
+2026-09-20T12:56:10.697Z [INFO]: Note: switching to '7a7627708f56080993fbe6cfac57e2efe4be6282'.
+                                 You are in 'detached HEAD' state. You can look around, make experimental
+                                 changes and commit them, and you can discard any commits you make in this
+                                 state without impacting any branches by switching back to a branch.
+                                 If you want to create a new branch to retain commits you create, you may
+                                 do so (now or later) by using -c with the switch command. Example:
+                                 git switch -c <new-branch-name>
+                                 Or undo this operation with:
+                                 git switch -
+                                 Turn off this advice by setting config variable advice.detachedHead to false
+                                 HEAD is now at 7a76277 feat: pagina Agenda com calendario interativo, vinculacao real de Consulta Agendada a Appointment
+2026-09-20T12:56:10.773Z [INFO]: Successfully cleaned up Git credentials
+2026-09-20T12:56:10.774Z [INFO]: # Checking for Git submodules at: /codebuild/output/src2895636298/src/mediflux-crm-health2/.gitmodules
+2026-09-20T12:56:10.782Z [INFO]: # Retrieving environment cache...
+2026-09-20T12:56:10.835Z [WARNING]: ! Unable to write cache: {"code":"ERR_BAD_REQUEST","message":"Request failed with status code 404"})}
+2026-09-20T12:56:10.835Z [INFO]: ---- Setting Up SSM Secrets ----
+2026-09-20T12:56:10.835Z [INFO]: SSM params {"Path":"/amplify/d1lf3c8qkcbqzm/master/","WithDecryption":true}
+2026-09-20T12:56:10.881Z [WARNING]: !Failed to set up process.env.secrets
+2026-09-20T12:56:11.455Z [INFO]: # No package override configuration found.
+2026-09-20T12:56:11.458Z [INFO]: # Retrieving cache...
+2026-09-20T12:56:22.106Z [INFO]: # Extracting cache...
+2026-09-20T12:56:36.232Z [INFO]: # Extraction completed
+2026-09-20T12:56:36.421Z [INFO]: # Retrieved cache
+2026-09-20T12:56:41.206Z [INFO]: ## Starting Backend Build
+                                 ## Checking for associated backend environment...
+                                 ## No backend environment association found, continuing...
+2026-09-20T12:56:41.211Z [INFO]: ## Completed Backend Build
+                                 {"backendDuration": 0}
+                                 ## Starting Frontend Build
+                                 # Starting phase: preBuild
+                                 # Executing command: npm install
+2026-09-20T12:57:03.219Z [INFO]: up to date, audited 771 packages in 17s
+2026-09-20T12:57:03.223Z [INFO]: 194 packages are looking for funding
+                                 run `npm fund` for details
+2026-09-20T12:57:03.277Z [INFO]: 13 vulnerabilities (7 moderate, 6 high)
+                                 To address issues that do not require attention, run:
+                                 npm audit fix
+                                 To address all issues (including breaking changes), run:
+                                 npm audit fix --force
+                                 Run `npm audit` for details.
+2026-09-20T12:57:03.287Z [INFO]: # Completed phase: preBuild
+                                 # Starting phase: build
+                                 # Executing command: npm run build
+2026-09-20T12:57:03.395Z [INFO]: > ai-studio-applet@0.1.0 build
+                                 > next build
+2026-09-20T12:57:04.265Z [WARNING]: ⚠ Found lockfile missing swc dependencies, run next locally to automatically patch
+2026-09-20T12:57:04.361Z [INFO]: ▲ Next.js 15.5.25
+2026-09-20T12:57:04.362Z [INFO]: 
+2026-09-20T12:57:04.464Z [INFO]: Creating an optimized production build ...
+2026-09-20T12:57:21.746Z [INFO]: ✓ Compiled successfully in 17.2s
+2026-09-20T12:57:21.771Z [INFO]: Skipping linting
+2026-09-20T12:57:21.771Z [INFO]: Checking validity of types ...
+2026-09-20T12:57:31.844Z [WARNING]: Failed to compile.
+2026-09-20T12:57:31.850Z [WARNING]: ./components/layout/AccessDeniedGuard.tsx:42:9
+                                    Type error: Property 'agenda' is missing in type '{ landing_page: string; visao_geral: string; atendimentos: string; usuarios: string; conversas_arquivadas: string; jornadas: string; pendencias: string; automacoes: string; indicadores: string; configuracoes: string; auditoria_lgpd: string; analise_inteligente: string; }' but required in type 'Record<TabId, string>'.
+                                    [0m [90m 40 |[39m   [36mconst[39m [isRestoringTrial[33m,[39m setIsRestoringTrial] [33m=[39m useState([36mfalse[39m)[33m;[39m
+                                    [90m 41 |[39m
+                                    [31m[1m>[22m[39m[90m 42 |[39m   [36mconst[39m tabNames[33m:[39m [33mRecord[39m[33m<[39m[33mTabId[39m[33m,[39m string[33m>[39m [33m=[39m {
+                                    [90m    |[39m         [31m[1m^[22m[39m
+                                    [90m 43 |[39m     landing_page[33m:[39m [32m"Landing Page (Página Pública)"[39m[33m,[39m
+                                    [90m 44 |[39m     visao_geral[33m:[39m [32m"Visão Geral"[39m[33m,[39m
+                                    [90m 45 |[39m     atendimentos[33m:[39m [32m"Atendimentos & Chat"[39m[33m,[39m[0m
+2026-09-20T12:57:31.889Z [WARNING]: Next.js build worker exited with code: 1 and signal: null
+2026-09-20T12:57:31.943Z [ERROR]: !!! Build failed
+2026-09-20T12:57:31.943Z [INFO]: Please read more about Amplify Hosting's support for SSR frameworks to find if your build failure is related to an unsupported feature: https://docs.aws.amazon.com/amplify/latest/userguide/amplify-ssr-framework-support.html. You may also find this troubleshooting guide useful: https://docs.aws.amazon.com/amplify/latest/userguide/troubleshooting-ssr-deployment.html
+2026-09-20T12:57:31.943Z [ERROR]: !!! Error: Command failed with exit code 1
+2026-09-20T12:57:31.943Z [INFO]: # Starting environment caching...
+2026-09-20T12:57:31.944Z [INFO]: # Environment caching completed
+
