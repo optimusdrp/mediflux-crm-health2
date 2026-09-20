@@ -46,6 +46,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
     usuarios: "Usuários",
     conversas_arquivadas: "Conversas Arquivadas",
     jornadas: "Jornadas & Funis",
+    agenda: "Agenda",
     pendencias: "Pendências & SLA",
     automacoes: "Automações",
     indicadores: "Indicadores & Billing",
