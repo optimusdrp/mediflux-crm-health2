@@ -29,6 +29,8 @@ interface AuthContextType {
   logout: () => void;
   switchRole: (role: Role) => Promise<void>;
   refreshSubscription: () => Promise<void>;
+  /** Atualiza os dados da clínica no contexto em memória, sem precisar recarregar a sessão inteira — usado após salvar edições em Configurações → Identidade & Unidades. */
+  updateClinic: (clinic: Clinic) => void;
 }
 
 const DEFAULT_USERS_BY_ROLE: Record<Role, string> = {
@@ -151,6 +153,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateClinic = useCallback((updatedClinic: Clinic) => {
+    setClinic(updatedClinic);
+  }, []);
+
   // Inicialização da sessão a partir de token válido
   useEffect(() => {
     let isMounted = true;
@@ -265,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         switchRole,
         refreshSubscription,
+        updateClinic,
       }}
     >
       {children}
