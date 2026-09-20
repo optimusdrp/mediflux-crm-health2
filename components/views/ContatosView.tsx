@@ -231,14 +231,12 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
             <p className="text-xs text-slate-500">Pacientes, leads e outros contatos, tudo num só lugar.</p>
           </div>
         </div>
-        {activeTab !== 'paciente' && (
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" /> Novo {activeTab === 'lead' ? 'Lead' : 'Contato'}
-          </button>
-        )}
+        <button
+          onClick={openCreateModal}
+          className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+        >
+          <UserPlus className="w-3.5 h-3.5" /> {activeTab === 'paciente' ? 'Novo Lead' : `Novo ${activeTab === 'lead' ? 'Lead' : 'Contato'}`}
+        </button>
       </div>
 
       {/* Tabs */}
@@ -349,13 +347,13 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
           <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-3 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-sky-600" /> Novo {activeTab === 'lead' ? 'Lead' : 'Contato'}
+                <Sparkles className="w-4 h-4 text-sky-600" /> Novo {activeTab === 'outro' ? 'Contato' : 'Lead'}
               </h4>
               <button onClick={() => setIsCreateModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <ContactFormFields form={createForm} setForm={setCreateForm} showLeadStatus={activeTab === 'lead'} funnels={funnels} showFunnelSelector={activeTab === 'lead'} />
+            <ContactFormFields form={createForm} setForm={setCreateForm} showLeadStatus={activeTab !== 'outro'} funnels={funnels} showFunnelSelector={activeTab !== 'outro'} />
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setIsCreateModalOpen(false)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
                 Cancelar
