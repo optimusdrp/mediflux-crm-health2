@@ -35,7 +35,27 @@ export interface User {
   clinicId: string;
   name: string;
   email: string;
+  /** Perfil principal — decide o comportamento padrão do usuário e é o que aparece em destaque nas telas. */
   role: Role;
+  /**
+   * Perfis adicionais, além do principal — um usuário com
+   * recepcao (principal) + financeiro (adicional) enxerga a união
+   * das abas/ações de ambos, a menos que customPermissionOverride
+   * esteja definido (nesse caso, o override manda, ignorando a
+   * união automática).
+   */
+  additionalRoles?: Role[];
+  /**
+   * Quando definido, substitui por completo a união automática de
+   * permissões dos perfis (principal + adicionais) deste usuário —
+   * dá ao administrador controle granular por pessoa, além do que a
+   * Matriz RBAC por perfil já oferece. Ausente na maioria dos
+   * usuários, que seguem só a união dos perfis normalmente.
+   */
+  customPermissionOverride?: {
+    permittedTabs: TabId[];
+    grantedActions: SensitiveAction[];
+  };
   avatarUrl?: string;
   crm?: string;
   specialty?: string;

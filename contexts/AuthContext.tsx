@@ -27,17 +27,17 @@ interface AuthContextType {
     acceptTerms: boolean;
   }) => Promise<void>;
   logout: () => void;
+  switchRole: (role: Role) => Promise<void>;
   refreshSubscription: () => Promise<void>;
-  /**
-   * Atualiza o estado local de `clinic` com os dados retornados por
-   * PUT /clinic — usado por ConfiguracoesView após salvar a aba
-   * "Identidade & Unidades", para o resto da aplicação (ex.: o
-   * cabeçalho do simulador de Respostas Rápidas, que usa
-   * identityData.nomeFantasia) refletir a mudança sem precisar de um
-   * reload completo da página.
-   */
-  updateClinic: (clinic: Clinic) => void;
 }
+
+const DEFAULT_USERS_BY_ROLE: Record<Role, string> = {
+  admin: 'admin@cardiovida.com.br',
+  recepcao: 'recepcao@cardiovida.com.br',
+  medico: 'camila.med@cardiovida.com.br',
+  financeiro: 'financeiro@cardiovida.com.br',
+  terceirizado: 'terceirizado@suportesaude.com.br',
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -135,6 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void clearFirebaseAuthSession();
   }, []);
 
+  const switchRole = async (role: Role) => {
+    const targetEmail = DEFAULT_USERS_BY_ROLE[role];
+    if (targetEmail) {
+      await login(targetEmail, 'cardiovida2026');
+    }
+  };
+
   const refreshSubscription = async () => {
     try {
       const { subscription: updatedSub } = await apiService.getSubscription();
@@ -142,10 +149,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignora erro silencioso
     }
-  };
-
-  const updateClinic = (updatedClinic: Clinic) => {
-    setClinic(updatedClinic);
   };
 
   // Inicialização da sessão a partir de token válido
@@ -211,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'visao_geral',
           'atendimentos',
           'jornadas',
+          'agenda',
           'pendencias',
           'automacoes',
           'indicadores',
@@ -218,10 +222,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'auditoria_lgpd',
           'analise_inteligente',
         ],
-        recepcao: ['atendimentos', 'jornadas', 'pendencias'],
+        recepcao: ['atendimentos', 'jornadas', 'agenda', 'pendencias'],
         financeiro: ['visao_geral', 'pendencias', 'indicadores'],
         terceirizado: ['pendencias'],
-        medico: ['visao_geral', 'atendimentos', 'jornadas', 'pendencias', 'auditoria_lgpd', 'analise_inteligente'],
+        medico: ['visao_geral', 'atendimentos', 'jornadas', 'agenda', 'pendencias', 'auditoria_lgpd', 'analise_inteligente'],
       };
 
       if (permissions?.permittedTabs) {
@@ -259,8 +263,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         registerTrial,
         logout,
+        switchRole,
         refreshSubscription,
-        updateClinic,
       }}
     >
       {children}

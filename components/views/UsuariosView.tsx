@@ -33,11 +33,13 @@ interface UserFormState {
   name: string;
   email: string;
   role: Role;
+  /** Perfis adicionais, além do principal (role acima) — o usuário tem a união das permissões de todos os perfis, a menos que um administrador defina uma permissão customizada para ele. */
+  additionalRoles: Role[];
   specialty: string;
   crm: string;
 }
 
-const EMPTY_FORM: UserFormState = { name: '', email: '', role: 'recepcao', specialty: '', crm: '' };
+const EMPTY_FORM: UserFormState = { name: '', email: '', role: 'recepcao', additionalRoles: [], specialty: '', crm: '' };
 
 /**
  * Página de Gestão de Usuários — NOVA. Acesso restrito ao
@@ -158,7 +160,7 @@ export function UsuariosView() {
 
   const startEditingUser = (user: User) => {
     setEditingUser(user);
-    setEditForm({ name: user.name, email: user.email, role: user.role, specialty: user.specialty || '', crm: user.crm || '' });
+    setEditForm({ name: user.name, email: user.email, role: user.role, additionalRoles: user.additionalRoles || [], specialty: user.specialty || '', crm: user.crm || '' });
     setEditNewPassword('');
   };
 
@@ -166,7 +168,7 @@ export function UsuariosView() {
     if (!editingUser || !editForm.name.trim()) return;
     setIsSavingEdit(true);
     try {
-      const payload: any = { id: editingUser.id, name: editForm.name.trim(), role: editForm.role, specialty: editForm.specialty, crm: editForm.crm };
+      const payload: any = { id: editingUser.id, name: editForm.name.trim(), role: editForm.role, additionalRoles: editForm.additionalRoles, specialty: editForm.specialty, crm: editForm.crm };
       if (editNewPassword.trim()) {
         if (editNewPassword.length < 8) {
           error('Senha muito curta', 'A nova senha deve ter pelo menos 8 caracteres.');
@@ -322,6 +324,7 @@ export function UsuariosView() {
                   <div className="text-[11px] text-slate-500 truncate">{u.email}</div>
                   <div className="text-[11px] text-slate-400">
                     {ROLE_LABELS[u.role]}
+                    {u.additionalRoles && u.additionalRoles.length > 0 && ` + ${u.additionalRoles.map((r) => ROLE_LABELS[r]).join(', ')}`}
                     {u.specialty ? ` • ${u.specialty}` : ''}
                     {u.crm ? ` • ${u.crm}` : ''}
                   </div>
@@ -416,10 +419,10 @@ export function UsuariosView() {
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Perfil de Acesso</label>
+                    <label className="block font-semibold text-slate-600 mb-1">Perfil de Acesso (Principal)</label>
                     <select
                       value={createForm.role}
-                      onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role })}
+                      onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role, additionalRoles: createForm.additionalRoles.filter((r) => r !== e.target.value) })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl"
                     >
                       {ROLE_OPTIONS.map((r) => (
@@ -428,6 +431,31 @@ export function UsuariosView() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">
+                      Perfis Adicionais <span className="text-slate-400 font-normal">(opcional)</span>
+                    </label>
+                    <p className="text-[10px] text-slate-500 mb-1.5">O usuário terá a união das permissões de todos os perfis marcados.</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {ROLE_OPTIONS.filter((r) => r !== createForm.role).map((r) => (
+                        <label key={r} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={createForm.additionalRoles.includes(r)}
+                            onChange={(e) =>
+                              setCreateForm({
+                                ...createForm,
+                                additionalRoles: e.target.checked
+                                  ? [...createForm.additionalRoles, r]
+                                  : createForm.additionalRoles.filter((x) => x !== r),
+                              })
+                            }
+                          />
+                          <span>{ROLE_LABELS[r]}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -494,10 +522,10 @@ export function UsuariosView() {
                 <input type="text" value={editForm.email} disabled className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-xl text-slate-500" />
               </div>
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Perfil de Acesso</label>
+                <label className="block font-semibold text-slate-600 mb-1">Perfil de Acesso (Principal)</label>
                 <select
                   value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role, additionalRoles: editForm.additionalRoles.filter((r) => r !== e.target.value) })}
                   disabled={editingUser.id === currentUser?.id}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:opacity-50"
                   title={editingUser.id === currentUser?.id ? 'Você não pode alterar seu próprio perfil de acesso' : ''}
@@ -508,6 +536,32 @@ export function UsuariosView() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">
+                  Perfis Adicionais <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <p className="text-[10px] text-slate-500 mb-1.5">O usuário terá a união das permissões de todos os perfis marcados.</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ROLE_OPTIONS.filter((r) => r !== editForm.role).map((r) => (
+                    <label key={r} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        disabled={editingUser.id === currentUser?.id}
+                        checked={editForm.additionalRoles.includes(r)}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            additionalRoles: e.target.checked
+                              ? [...editForm.additionalRoles, r]
+                              : editForm.additionalRoles.filter((x) => x !== r),
+                          })
+                        }
+                      />
+                      <span>{ROLE_LABELS[r]}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

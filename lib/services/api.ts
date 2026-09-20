@@ -21,6 +21,8 @@ import {
   LeadQualificationResult,
   SentimentAnalysisResult,
   Role,
+  TabId,
+  SensitiveAction,
   Funnel,
   FunnelStage,
   Unit,
@@ -626,6 +628,7 @@ export const apiService = {
     name: string;
     email: string;
     role: Role;
+    additionalRoles?: Role[];
     specialty?: string;
     crm?: string;
     password?: string;
@@ -640,6 +643,8 @@ export const apiService = {
     id: string;
     name?: string;
     role?: Role;
+    additionalRoles?: Role[];
+    customPermissionOverride?: { permittedTabs: TabId[]; grantedActions: SensitiveAction[] };
     specialty?: string;
     crm?: string;
     active?: boolean;
