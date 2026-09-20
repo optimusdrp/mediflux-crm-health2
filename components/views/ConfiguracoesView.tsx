@@ -169,6 +169,7 @@ const ALL_TABS: { id: TabId; label: string }[] = [
   { id: 'jornadas', label: 'Jornadas (Kanban)' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'contatos', label: 'Contatos' },
+  { id: 'chat_interno', label: 'Chat Interno' },
   { id: 'pendencias', label: 'Pendências & SLA' },
   { id: 'automacoes', label: 'Automações' },
   { id: 'indicadores', label: 'Indicadores' },

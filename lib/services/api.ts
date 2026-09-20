@@ -23,6 +23,8 @@ import {
   Role,
   Contact,
   ContactGroup,
+  InternalChatThread,
+  InternalChatMessage,
   TabId,
   SensitiveAction,
   Funnel,
@@ -694,6 +696,44 @@ export const apiService = {
     return authFetch<{ success: boolean }>(`/api/contact-groups?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
+  },
+
+  // 11.8 Chat Interno — conversas entre usuários da equipe (não
+  // confundir com ChatMessage, que é conversa com paciente via
+  // WhatsApp). Só usuários ATIVOS podem ser encontrados para iniciar
+  // uma conversa nova; a primeira mensagem já cria a thread
+  // automaticamente, sem passo de convite.
+  async getInternalChatThreads() {
+    return authFetch<{
+      threads: (InternalChatThread & { displayName?: string; unreadCount: number })[];
+    }>("/api/internal-chat/threads");
+  },
+
+  async getInternalChatMessages(threadId: string) {
+    return authFetch<{ messages: InternalChatMessage[] }>(
+      `/api/internal-chat/threads/${encodeURIComponent(threadId)}/messages`,
+    );
+  },
+
+  async sendInternalChatMessage(payload: { threadId?: string; recipientUserId?: string; text: string }) {
+    return authFetch<{ message: InternalChatMessage; threadId: string }>("/api/internal-chat/messages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createInternalChatGroup(payload: { name: string; participantUserIds: string[] }) {
+    return authFetch<{ thread: InternalChatThread }>("/api/internal-chat/groups", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async markInternalChatThreadRead(threadId: string) {
+    return authFetch<{ success: boolean; markedCount: number }>(
+      `/api/internal-chat/threads/${encodeURIComponent(threadId)}/read`,
+      { method: "POST" },
+    );
   },
 
   // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.

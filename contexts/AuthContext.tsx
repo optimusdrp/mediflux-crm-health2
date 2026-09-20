@@ -221,6 +221,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'atendimentos',
           'jornadas',
           'agenda',
+          'contatos',
+          'chat_interno',
           'pendencias',
           'automacoes',
           'indicadores',
@@ -228,10 +230,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'auditoria_lgpd',
           'analise_inteligente',
         ],
-        recepcao: ['atendimentos', 'jornadas', 'agenda', 'pendencias'],
-        financeiro: ['visao_geral', 'pendencias', 'indicadores'],
-        terceirizado: ['pendencias'],
-        medico: ['visao_geral', 'atendimentos', 'jornadas', 'agenda', 'pendencias', 'auditoria_lgpd', 'analise_inteligente'],
+        recepcao: ['atendimentos', 'jornadas', 'agenda', 'contatos', 'chat_interno', 'pendencias'],
+        financeiro: ['visao_geral', 'chat_interno', 'pendencias', 'indicadores'],
+        terceirizado: ['chat_interno', 'pendencias'],
+        medico: ['visao_geral', 'atendimentos', 'jornadas', 'agenda', 'contatos', 'chat_interno', 'pendencias', 'auditoria_lgpd', 'analise_inteligente'],
       };
 
       if (permissions?.permittedTabs) {

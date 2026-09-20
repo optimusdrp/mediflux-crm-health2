@@ -48,6 +48,7 @@ export function AccessDeniedGuard({ tab, reason }: AccessDeniedGuardProps) {
     jornadas: "Jornadas & Funis",
     agenda: "Agenda",
     contatos: "Central de Contatos",
+    chat_interno: "Chat Interno",
     pendencias: "Pendências & SLA",
     automacoes: "Automações",
     indicadores: "Indicadores & Billing",

@@ -17,6 +17,7 @@ import { AtendimentosView } from '@/components/views/AtendimentosView';
 import { JornadasView } from '@/components/views/JornadasView';
 import { AgendaView } from '@/components/views/AgendaView';
 import { ContatosView } from '@/components/views/ContatosView';
+import { ChatInternoView } from '@/components/views/ChatInternoView';
 import { PendenciasView } from '@/components/views/PendenciasView';
 import { AutomacoesView } from '@/components/views/AutomacoesView';
 import { IndicadoresView } from '@/components/views/IndicadoresView';
@@ -263,6 +264,8 @@ function MediFluxAppContent() {
                   }}
                 />
               )}
+
+              {activeTab === "chat_interno" && <ChatInternoView />}
 
               {activeTab === "pendencias" && (
                 <PendenciasView

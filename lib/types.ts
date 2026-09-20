@@ -7,6 +7,7 @@ export type TabId =
   | 'jornadas'
   | 'agenda'
   | 'contatos'
+  | 'chat_interno'
   | 'pendencias'
   | 'automacoes'
   | 'indicadores'
@@ -292,6 +293,40 @@ export interface ContactGroup {
   description?: string;
   contactIds: string[];
   createdAt: string;
+}
+
+/**
+ * Conversa interna entre usuários da equipe — separada por completo
+ * de ChatMessage (que é sobre conversa com paciente via WhatsApp/
+ * canais externos). Uma InternalChatThread é 1-a-1 (2 participantes,
+ * criada automaticamente na primeira mensagem entre dois usuários
+ * ativos, sem convite manual) ou em grupo (isGroup: true, nome
+ * próprio, 3+ participantes). Só usuários com active: true podem
+ * participar — um usuário desativado nunca aparece como opção nova,
+ * mas threads já existentes com ele continuam visíveis (histórico).
+ */
+export interface InternalChatThread {
+  id: string;
+  clinicId: string;
+  isGroup: boolean;
+  /** Nome do grupo — obrigatório quando isGroup é true; ausente em conversas 1-a-1 (o nome exibido é o do outro participante). */
+  name?: string;
+  participantUserIds: string[];
+  createdAt: string;
+  createdByUserId?: string;
+  lastMessageAt?: string;
+  lastMessagePreview?: string;
+}
+
+export interface InternalChatMessage {
+  id: string;
+  clinicId: string;
+  threadId: string;
+  senderUserId: string;
+  text: string;
+  timestamp: string;
+  /** IDs dos usuários que já leram esta mensagem — usado para contagem de não lidas por participante. */
+  readByUserIds: string[];
 }
 
 export interface Appointment {

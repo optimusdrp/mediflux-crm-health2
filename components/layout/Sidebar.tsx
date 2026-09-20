@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutDashboard,
   MessageSquareText,
+  MessageCircle,
   KanbanSquare,
   Calendar,
   ClockAlert,
@@ -138,6 +139,12 @@ export function Sidebar({
       label: "Contatos",
       icon: Users2,
       description: "Pacientes, leads e outros contatos",
+    },
+    {
+      id: "chat_interno",
+      label: "Chat Interno",
+      icon: MessageCircle,
+      description: "Converse com a equipe",
     },
     {
       id: "pendencias",
