@@ -145,10 +145,10 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
         phone: createForm.phone.trim() || undefined,
         email: createForm.email.trim() || undefined,
         notes: createForm.notes.trim() || undefined,
-        leadStatus: activeTab === 'lead' ? (createForm.leadStatus as Contact['leadStatus']) : undefined,
+        leadStatus: activeTab !== 'outro' ? (createForm.leadStatus as Contact['leadStatus']) : undefined,
         tags: createForm.tags ? createForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        funnelId: activeTab === 'lead' && createForm.funnelId ? createForm.funnelId : undefined,
-        funnelStage: activeTab === 'lead' && createForm.funnelStage ? createForm.funnelStage : undefined,
+        funnelId: activeTab !== 'outro' && createForm.funnelId ? createForm.funnelId : undefined,
+        funnelStage: activeTab !== 'outro' && createForm.funnelStage ? createForm.funnelStage : undefined,
       });
       setContacts((prev) => [...prev, res.contact]);
       success('Contato Criado', res.patient ? `"${res.contact.name}" foi adicionado ao funil "${funnels.find((f) => f.id === createForm.funnelId)?.name}".` : `"${res.contact.name}" foi adicionado.`);
