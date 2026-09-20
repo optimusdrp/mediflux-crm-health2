@@ -7,6 +7,7 @@ import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
 import { getStalledLimitMinutes, minutesSince, formatMinutesElapsed } from '@/lib/slaRules';
+import { RequiresAppointmentError } from '@/lib/services/authFetch';
 import {
   KanbanSquare,
   Plus,
@@ -26,6 +27,8 @@ import {
 interface JornadasViewProps {
   onSelectPatient: (id: string) => void;
   onOpenNewPatientModal: () => void;
+  /** Chamado quando o backend bloqueia o movimento por falta de agendamento vinculado — o chamador (page.tsx) decide navegar para a Agenda com este paciente pré-selecionado. */
+  onRequireAppointment: (patientId: string) => void;
 }
 
 const URGENCY_BAR: Record<UrgencyLevel, string> = {
@@ -76,8 +79,8 @@ const VIEW_MODE_STORAGE_KEY = 'mediflux_jornadas_view_mode';
  *
  * A escolha do usuário é lembrada (localStorage) entre visitas.
  */
-export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: JornadasViewProps) {
-  const { success, error } = useToast();
+export function JornadasView({ onSelectPatient, onOpenNewPatientModal, onRequireAppointment }: JornadasViewProps) {
+  const { success, error, info } = useToast();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [funnels, setFunnels] = useState<Funnel[]>([]);
   /**
@@ -256,6 +259,11 @@ export function JornadasView({ onSelectPatient, onOpenNewPatientModal }: Jornada
       setPatients((prev) => prev.map((p) => (p.id === patientId ? res.patient : p)));
       success('Etapa Atualizada', `${res.patient.name} movido para "${stageName}".`);
     } catch (err: any) {
+      if (err instanceof RequiresAppointmentError) {
+        info('Agendamento Necessário', err.message);
+        onRequireAppointment(err.patientId);
+        return;
+      }
       error('Erro ao mover etapa', err.message);
     }
   };

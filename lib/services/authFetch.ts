@@ -8,27 +8,19 @@ export class FeatureNotAvailableError extends Error {
 }
 
 /**
- * Prefixa chamadas que começam com '/api/...' com a URL real do backend
- * (a Lambda core-api, exposta via API Gateway), quando configurada.
- *
- * Contexto desta mudança (migração AWS): o front-end original chamava
- * suas próprias API Routes internas do Next.js (mesmo domínio, caminho
- * relativo '/api/...'). Agora o backend roda separado, numa Lambda
- * própria — então precisamos montar a URL absoluta. Mudança feita aqui,
- * dentro de authFetch(), e não nas ~46 chamadas em lib/services/api.ts,
- * para não precisar tocar em cada uma delas.
- *
- * Além do domínio, os caminhos também mudam de prefixo: as rotas da
- * Lambda não usam o prefixo '/api' (ex.: '/patients', não
- * '/api/patients') — ver src/handler.ts da Lambda. Esse ajuste de
- * prefixo também é feito aqui.
+ * Lançada quando o backend bloqueia (409) o movimento de um paciente
+ * para uma etapa que exige um agendamento real vinculado, e ainda não
+ * existe nenhum. Carrega o patientId para o chamador abrir o
+ * formulário de novo agendamento diretamente, sem precisar
+ * re-perguntar qual paciente era.
  */
-function resolveApiUrl(input: RequestInfo | URL): RequestInfo | URL {
-  if (typeof input !== 'string' || !input.startsWith('/api/')) return input;
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!baseUrl) return input; // sem variável configurada, mantém o comportamento original (rota relativa)
-  const pathWithoutApiPrefix = input.replace(/^\/api/, '');
-  return `${baseUrl.replace(/\/$/, '')}${pathWithoutApiPrefix}`;
+export class RequiresAppointmentError extends Error {
+  public patientId: string;
+  constructor(patientId: string, message: string) {
+    super(message);
+    this.name = 'RequiresAppointmentError';
+    this.patientId = patientId;
+  }
 }
 
 export async function authFetch<T>(
@@ -36,7 +28,6 @@ export async function authFetch<T>(
   init?: RequestInit,
   retries = 2
 ): Promise<T> {
-  const resolvedInput = resolveApiUrl(input);
   const token = typeof window !== 'undefined' ? localStorage.getItem('mediflux_jwt_token') : null;
 
   const headers = new Headers(init?.headers);
@@ -50,7 +41,7 @@ export async function authFetch<T>(
 
   let response: Response;
   try {
-    response = await fetch(resolvedInput, {
+    response = await fetch(input, {
       ...init,
       headers,
     });
@@ -80,6 +71,14 @@ export async function authFetch<T>(
       );
     }
     throw new Error(errorData.error || 'Acesso negado: permissão insuficiente.');
+  }
+
+  if (response.status === 409) {
+    const errorData = await response.json().catch(() => ({}));
+    if (errorData.requiresAppointment && errorData.patientId) {
+      throw new RequiresAppointmentError(errorData.patientId, errorData.error || 'Esta etapa exige um agendamento vinculado.');
+    }
+    throw new Error(errorData.error || 'Conflito ao processar a requisição.');
   }
 
   if (!response.ok) {

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   MessageSquareText,
   KanbanSquare,
+  Calendar,
   ClockAlert,
   Zap,
   BarChart3,
@@ -124,6 +125,12 @@ export function Sidebar({
       label: "Jornadas & Funis",
       icon: KanbanSquare,
       description: "Kanban e etapas clínicas",
+    },
+    {
+      id: "agenda",
+      label: "Agenda",
+      icon: Calendar,
+      description: "Calendário de consultas",
     },
     {
       id: "pendencias",

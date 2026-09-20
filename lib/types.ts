@@ -5,6 +5,7 @@ export type TabId =
   | 'visao_geral'
   | 'atendimentos'
   | 'jornadas'
+  | 'agenda'
   | 'pendencias'
   | 'automacoes'
   | 'indicadores'
@@ -225,7 +226,10 @@ export interface Appointment {
   specialty: string;
   date: string;
   time: string;
+  /** Duração em minutos — usada para desenhar o bloco no calendário; ausente em agendamentos criados antes deste campo existir (tratado como 30min por padrão). */
+  durationMinutes?: number;
   procedure: string;
+  notes?: string;
   status: 'agendado' | 'confirmado' | 'em_atendimento' | 'concluido' | 'cancelado' | 'faltou';
   ehrData?: {
     integrated: boolean;
@@ -421,6 +425,15 @@ export interface FunnelStage {
     enabled: boolean;
     messageText: string;
   };
+  /**
+   * Marca esta etapa como exigindo um agendamento real vinculado
+   * (Appointment ativo, não cancelado) — ex.: "Consulta Agendada".
+   * Mover um paciente para uma etapa marcada assim, sem um
+   * agendamento futuro já existente, abre o formulário de novo
+   * agendamento em vez de completar o movimento; o movimento só se
+   * confirma quando o agendamento é de fato criado.
+   */
+  requiresAppointment?: boolean;
 }
 
 export interface Funnel {

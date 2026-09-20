@@ -15,6 +15,7 @@ import { LandingPage } from '@/components/views/LandingPage';
 import { VisaoGeralView } from '@/components/views/VisaoGeralView';
 import { AtendimentosView } from '@/components/views/AtendimentosView';
 import { JornadasView } from '@/components/views/JornadasView';
+import { AgendaView } from '@/components/views/AgendaView';
 import { PendenciasView } from '@/components/views/PendenciasView';
 import { AutomacoesView } from '@/components/views/AutomacoesView';
 import { IndicadoresView } from '@/components/views/IndicadoresView';
@@ -37,6 +38,8 @@ function MediFluxAppContent() {
   const { user, subscription, isTrialExpired, hasPermission, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('visao_geral');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  /** Preenchido quando Jornadas bloqueia o movimento de um paciente por falta de agendamento — a Agenda usa isso para abrir o formulário de novo agendamento já com o paciente certo escolhido. */
+  const [agendaPrefilledPatientId, setAgendaPrefilledPatientId] = useState<string | undefined>(undefined);
 
   // Modals state
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
@@ -233,6 +236,21 @@ function MediFluxAppContent() {
                     setActiveTab("atendimentos");
                   }}
                   onOpenNewPatientModal={() => setIsNewPatientModalOpen(true)}
+                  onRequireAppointment={(patientId) => {
+                    setAgendaPrefilledPatientId(patientId);
+                    setActiveTab("agenda");
+                  }}
+                />
+              )}
+
+              {activeTab === "agenda" && (
+                <AgendaView
+                  onSelectPatient={(id) => {
+                    setSelectedPatientId(id);
+                    setActiveTab("atendimentos");
+                  }}
+                  prefilledPatientId={agendaPrefilledPatientId}
+                  onPrefilledPatientConsumed={() => setAgendaPrefilledPatientId(undefined)}
                 />
               )}
 

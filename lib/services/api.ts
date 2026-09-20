@@ -284,10 +284,13 @@ export const apiService = {
   },
 
   // 6. Agendamentos
-  async getAppointments(params?: { patientId?: string; date?: string }) {
+  async getAppointments(params?: { patientId?: string; date?: string; startDate?: string; endDate?: string; doctorName?: string }) {
     const query = new URLSearchParams();
     if (params?.patientId) query.set("patientId", params.patientId);
     if (params?.date) query.set("date", params.date);
+    if (params?.startDate) query.set("startDate", params.startDate);
+    if (params?.endDate) query.set("endDate", params.endDate);
+    if (params?.doctorName) query.set("doctorName", params.doctorName);
     return authFetch<{ appointments: Appointment[] }>(
       `/api/appointments?${query.toString()}`,
     );
