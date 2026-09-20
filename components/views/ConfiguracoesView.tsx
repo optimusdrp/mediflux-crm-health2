@@ -168,6 +168,7 @@ const ALL_TABS: { id: TabId; label: string }[] = [
   { id: 'atendimentos', label: 'Atendimentos' },
   { id: 'jornadas', label: 'Jornadas (Kanban)' },
   { id: 'agenda', label: 'Agenda' },
+  { id: 'contatos', label: 'Contatos' },
   { id: 'pendencias', label: 'Pendências & SLA' },
   { id: 'automacoes', label: 'Automações' },
   { id: 'indicadores', label: 'Indicadores' },
@@ -1469,6 +1470,26 @@ export function ConfiguracoesView({ onOpenUpgradeModal }: ConfiguracoesViewProps
                   etapas adicionadas ou removidas livremente.
                 </p>
               </div>
+
+              {/* Auto-promoção de lead a paciente */}
+              <label className="flex items-center justify-between p-3.5 bg-white border border-slate-200 rounded-2xl cursor-pointer">
+                <div>
+                  <div className="font-semibold text-slate-800">Promover lead a paciente automaticamente</div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Quando um agendamento vinculado a um lead é marcado como &ldquo;Concluído&rdquo;, ele vira paciente de verdade sem precisar de nenhuma ação manual.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings?.autoPromoteLeadOnAppointmentCompleted !== false}
+                  onChange={(e) => {
+                    if (!settings) return;
+                    setSettings({ ...settings, autoPromoteLeadOnAppointmentCompleted: e.target.checked });
+                    markDirty();
+                  }}
+                  className="w-4 h-4 text-sky-600 rounded shrink-0 ml-3"
+                />
+              </label>
 
               {/* Criar novo funil */}
               <div className="p-4 bg-sky-50/60 rounded-2xl border border-sky-200/60 flex flex-col sm:flex-row sm:items-end gap-2">

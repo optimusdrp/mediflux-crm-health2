@@ -656,8 +656,11 @@ export const apiService = {
     leadScore?: number;
     leadStatus?: Contact['leadStatus'];
     tags?: string[];
+    /** Vincula um lead simples (Contact) a um funil real — promove ele a Patient (patientStatus: 'lead'). */
+    funnelId?: string;
+    funnelStage?: string;
   }) {
-    return authFetch<{ contact: Contact }>("/api/contacts", {
+    return authFetch<{ contact: Contact; patient?: Patient }>("/api/contacts", {
       method: "PUT",
       body: JSON.stringify(payload),
     });

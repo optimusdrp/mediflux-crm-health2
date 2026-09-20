@@ -556,6 +556,14 @@ export interface ClinicSettings {
    * menos uma regra combina com o paciente. Ver SlaAlertRule.
    */
   slaAlertRules?: SlaAlertRule[];
+  /**
+   * Quando true (padrão), um lead vinculado a um Appointment que é
+   * marcado como 'concluido' vira paciente automaticamente
+   * (Patient.patientStatus muda de 'lead' para 'paciente'). Quando
+   * false, essa promoção nunca acontece sozinha — a clínica decide
+   * manualmente quando considerar alguém paciente de verdade.
+   */
+  autoPromoteLeadOnAppointmentCompleted?: boolean;
   globalNotifications: {
     enableSound: boolean;
     enablePopups: boolean;

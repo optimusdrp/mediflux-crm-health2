@@ -186,9 +186,19 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
         notes: editForm.notes.trim() || undefined,
         leadStatus: editingContact.type === 'lead' ? (editForm.leadStatus as Contact['leadStatus']) : undefined,
         tags: editForm.tags ? editForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        funnelId: editingContact.type === 'lead' && !editingContact.patientId && editForm.funnelId ? editForm.funnelId : undefined,
+        funnelStage: editingContact.type === 'lead' && !editingContact.patientId && editForm.funnelStage ? editForm.funnelStage : undefined,
       });
-      setContacts((prev) => prev.map((c) => (c.id === res.contact.id ? res.contact : c)));
-      success('Contato Atualizado', 'As alterações foram salvas.');
+      if (res.patient) {
+        // O Contact simples foi promovido a Patient — recarrega a
+        // lista inteira, já que o id do registro mudou (o Contact
+        // antigo foi removido, um novo derivado do Patient tomou seu lugar).
+        await fetchContacts();
+        success('Lead Vinculado ao Funil', `"${res.contact.name}" agora participa do Kanban de Jornadas.`);
+      } else {
+        setContacts((prev) => prev.map((c) => (c.id === res.contact.id ? res.contact : c)));
+        success('Contato Atualizado', 'As alterações foram salvas.');
+      }
       setEditingContact(null);
     } catch (err: any) {
       error('Falha ao atualizar contato', err.message);
@@ -380,7 +390,13 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <ContactFormFields form={editForm} setForm={setEditForm} showLeadStatus={editingContact.type === 'lead'} funnels={funnels} showFunnelSelector={false} />
+            <ContactFormFields
+              form={editForm}
+              setForm={setEditForm}
+              showLeadStatus={editingContact.type === 'lead'}
+              funnels={funnels}
+              showFunnelSelector={editingContact.type === 'lead' && !editingContact.patientId}
+            />
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setEditingContact(null)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
                 Cancelar
