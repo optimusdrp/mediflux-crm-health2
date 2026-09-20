@@ -16,6 +16,7 @@ import {
   Sparkles,
   Lock,
   Users,
+  Users2,
   Archive,
   ChevronsRight,
   ChevronsLeft,
@@ -131,6 +132,12 @@ export function Sidebar({
       label: "Agenda",
       icon: Calendar,
       description: "Calendário de consultas",
+    },
+    {
+      id: "contatos",
+      label: "Contatos",
+      icon: Users2,
+      description: "Pacientes, leads e outros contatos",
     },
     {
       id: "pendencias",

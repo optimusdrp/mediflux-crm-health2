@@ -16,6 +16,7 @@ import { VisaoGeralView } from '@/components/views/VisaoGeralView';
 import { AtendimentosView } from '@/components/views/AtendimentosView';
 import { JornadasView } from '@/components/views/JornadasView';
 import { AgendaView } from '@/components/views/AgendaView';
+import { ContatosView } from '@/components/views/ContatosView';
 import { PendenciasView } from '@/components/views/PendenciasView';
 import { AutomacoesView } from '@/components/views/AutomacoesView';
 import { IndicadoresView } from '@/components/views/IndicadoresView';
@@ -251,6 +252,15 @@ function MediFluxAppContent() {
                   }}
                   prefilledPatientId={agendaPrefilledPatientId}
                   onPrefilledPatientConsumed={() => setAgendaPrefilledPatientId(undefined)}
+                />
+              )}
+
+              {activeTab === "contatos" && (
+                <ContatosView
+                  onSelectPatient={(id) => {
+                    setSelectedPatientId(id);
+                    setActiveTab("atendimentos");
+                  }}
                 />
               )}
 
