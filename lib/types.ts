@@ -199,6 +199,18 @@ export interface Patient {
   archivedReason?: string;
   archivedAt?: string;
   archivedByUserId?: string;
+  /**
+   * Distingue um lead (interessado, ainda sem atendimento realizado)
+   * de um paciente confirmado — ambos são registros de Patient reais,
+   * participam do Kanban de Jornadas normalmente, com todo o mesmo
+   * comportamento (automações, histórico de transições, etc.).
+   * 'lead' muda para 'paciente' automaticamente quando um Appointment
+   * vinculado a ele é marcado como 'concluido' (ver
+   * routes/appointments.js). Ausente em registros criados antes deste
+   * campo existir — tratado como 'paciente' por padrão, para nunca
+   * reclassificar silenciosamente um paciente já atendido como lead.
+   */
+  patientStatus?: 'lead' | 'paciente';
 }
 
 export interface ChatMessage {

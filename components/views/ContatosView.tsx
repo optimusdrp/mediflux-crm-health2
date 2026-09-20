@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Contact } from '@/lib/types';
+import { Contact, Funnel } from '@/lib/types';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
 import {
@@ -53,9 +53,12 @@ interface ContactFormState {
   notes: string;
   leadStatus: string;
   tags: string;
+  /** Vincula o lead a uma etapa de um funil real — quando escolhidos, o lead já nasce como um Patient real (patientStatus: 'lead'), participando do Kanban normalmente. */
+  funnelId: string;
+  funnelStage: string;
 }
 
-const EMPTY_FORM: ContactFormState = { name: '', phone: '', email: '', notes: '', leadStatus: 'novo', tags: '' };
+const EMPTY_FORM: ContactFormState = { name: '', phone: '', email: '', notes: '', leadStatus: 'novo', tags: '', funnelId: '', funnelStage: '' };
 
 /**
  * Central de Contatos — unifica pacientes (Patient, refletido
@@ -68,6 +71,7 @@ const EMPTY_FORM: ContactFormState = { name: '', phone: '', email: '', notes: ''
 export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const { success, error } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [funnels, setFunnels] = useState<Funnel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ContactTab>('paciente');
   const [search, setSearch] = useState('');
@@ -84,8 +88,16 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const fetchContacts = async () => {
     setIsLoading(true);
     try {
-      const res = await apiService.getContacts();
-      setContacts(res.contacts || []);
+      const [contactsRes, settingsRes] = await Promise.allSettled([
+        apiService.getContacts(),
+        apiService.getClinicSettings(),
+      ]);
+      if (contactsRes.status === 'fulfilled') {
+        setContacts(contactsRes.value.contacts || []);
+      }
+      if (settingsRes.status === 'fulfilled') {
+        setFunnels(settingsRes.value.settings?.funnels || []);
+      }
     } catch (err: any) {
       error('Erro ao carregar contatos', err.message);
     } finally {
@@ -135,9 +147,11 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
         notes: createForm.notes.trim() || undefined,
         leadStatus: activeTab === 'lead' ? (createForm.leadStatus as Contact['leadStatus']) : undefined,
         tags: createForm.tags ? createForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        funnelId: activeTab === 'lead' && createForm.funnelId ? createForm.funnelId : undefined,
+        funnelStage: activeTab === 'lead' && createForm.funnelStage ? createForm.funnelStage : undefined,
       });
       setContacts((prev) => [...prev, res.contact]);
-      success('Contato Criado', `"${res.contact.name}" foi adicionado.`);
+      success('Contato Criado', res.patient ? `"${res.contact.name}" foi adicionado ao funil "${funnels.find((f) => f.id === createForm.funnelId)?.name}".` : `"${res.contact.name}" foi adicionado.`);
       setIsCreateModalOpen(false);
     } catch (err: any) {
       error('Falha ao criar contato', err.message);
@@ -155,6 +169,8 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
       notes: contact.notes || '',
       leadStatus: contact.leadStatus || 'novo',
       tags: (contact.tags || []).join(', '),
+      funnelId: '',
+      funnelStage: '',
     });
   };
 
@@ -339,14 +355,14 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <ContactFormFields form={createForm} setForm={setCreateForm} showLeadStatus={activeTab === 'lead'} />
+            <ContactFormFields form={createForm} setForm={setCreateForm} showLeadStatus={activeTab === 'lead'} funnels={funnels} showFunnelSelector={activeTab === 'lead'} />
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setIsCreateModalOpen(false)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
                 Cancelar
               </button>
               <button
                 onClick={handleCreate}
-                disabled={isSaving || !createForm.name.trim()}
+                disabled={isSaving || !createForm.name.trim() || (!!createForm.funnelId && !!createForm.funnelStage && !createForm.phone.trim())}
                 className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs disabled:opacity-40 transition-colors"
               >
                 {isSaving ? 'Salvando...' : 'Criar Contato'}
@@ -366,7 +382,7 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <ContactFormFields form={editForm} setForm={setEditForm} showLeadStatus={editingContact.type === 'lead'} />
+            <ContactFormFields form={editForm} setForm={setEditForm} showLeadStatus={editingContact.type === 'lead'} funnels={funnels} showFunnelSelector={false} />
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setEditingContact(null)} disabled={isSaving} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
                 Cancelar
@@ -408,13 +424,57 @@ function ContactFormFields({
   form,
   setForm,
   showLeadStatus,
+  funnels,
+  showFunnelSelector,
 }: {
   form: ContactFormState;
   setForm: React.Dispatch<React.SetStateAction<ContactFormState>>;
   showLeadStatus: boolean;
+  funnels: Funnel[];
+  showFunnelSelector: boolean;
 }) {
+  const selectedFunnel = funnels.find((f) => f.id === form.funnelId);
   return (
     <div className="space-y-3 text-xs">
+      {showFunnelSelector && (
+        <div className="p-3 bg-sky-50/60 border border-sky-200/60 rounded-xl space-y-2.5">
+          <p className="text-[10px] text-sky-800 font-semibold">
+            Vincule este lead a um funil (opcional) — ele já aparece no Kanban de Jornadas. Só vira paciente de verdade quando o atendimento for concluído.
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Funil</label>
+              <select
+                value={form.funnelId}
+                onChange={(e) => setForm((prev) => ({ ...prev, funnelId: e.target.value, funnelStage: '' }))}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white"
+              >
+                <option value="">Nenhum (só contato)</option>
+                {funnels.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Etapa</label>
+              <select
+                value={form.funnelStage}
+                disabled={!form.funnelId}
+                onChange={(e) => setForm((prev) => ({ ...prev, funnelStage: e.target.value }))}
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                <option value="">Selecione...</option>
+                {selectedFunnel?.stages.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {form.funnelId && form.funnelStage && (
+            <p className="text-[10px] text-amber-700">Telefone é obrigatório para vincular a um funil.</p>
+          )}
+        </div>
+      )}
       <div>
         <label className="block font-semibold text-slate-600 mb-1">Nome</label>
         <input

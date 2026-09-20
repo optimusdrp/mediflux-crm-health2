@@ -635,8 +635,13 @@ export const apiService = {
     leadScore?: number;
     leadStatus?: Contact['leadStatus'];
     tags?: string[];
+    /** Vincula o lead direto a uma etapa de um funil real — quando informados (os dois juntos), o lead já nasce como um Patient real (patientStatus: 'lead'), participando do Kanban normalmente. */
+    funnelId?: string;
+    funnelStage?: string;
+    healthInsurance?: string;
+    specialty?: string;
   }) {
-    return authFetch<{ contact: Contact }>("/api/contacts", {
+    return authFetch<{ contact: Contact; patient?: Patient }>("/api/contacts", {
       method: "POST",
       body: JSON.stringify(payload),
     });
