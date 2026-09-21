@@ -296,6 +296,30 @@ export interface ContactGroup {
 }
 
 /**
+ * Grupo de conversas com pacientes/leads/outros contatos — diferente
+ * de ContactGroup (uma organização interna sem reflexo externo) e de
+ * InternalChatThread (conversa entre usuários da equipe). Dois modos,
+ * escolhidos na criação:
+ *  - 'whatsapp_group': cria um grupo REAL do WhatsApp (via Evolution
+ *    API) — todos os participantes se veem e recebem as mensagens uns
+ *    dos outros, como qualquer grupo comum do WhatsApp.
+ *  - 'broadcast': envia a mesma mensagem para todos os contatos do
+ *    grupo individualmente — cada um recebe na própria conversa
+ *    privada, sem ver os demais nem saber que faz parte de um grupo.
+ */
+export interface ConversationGroup {
+  id: string;
+  clinicId: string;
+  name: string;
+  mode: 'whatsapp_group' | 'broadcast';
+  contactIds: string[];
+  /** Preenchido só quando mode === 'whatsapp_group', após a criação bem-sucedida no WhatsApp real. */
+  whatsappGroupId?: string;
+  createdAt: string;
+  createdByUserId?: string;
+}
+
+/**
  * Conversa interna entre usuários da equipe — separada por completo
  * de ChatMessage (que é sobre conversa com paciente via WhatsApp/
  * canais externos). Uma InternalChatThread é 1-a-1 (2 participantes,

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Contact, ContactGroup, Funnel } from '@/lib/types';
+import { Contact, ContactGroup, ConversationGroup, Funnel } from '@/lib/types';
 import { apiService } from '@/lib/services/api';
 import { useToast } from '@/contexts/ToastContext';
 import {
@@ -18,6 +18,7 @@ import {
   ArrowRight,
   FolderPlus,
   Folder,
+  MessageSquare,
 } from 'lucide-react';
 
 interface ContatosViewProps {
@@ -80,6 +81,15 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const [editingGroup, setEditingGroup] = useState<Partial<ContactGroup> | null>(null);
   const [isSavingGroup, setIsSavingGroup] = useState(false);
   const [pendingGroupDeleteId, setPendingGroupDeleteId] = useState<string | null>(null);
+
+  const [groupsSubTab, setGroupsSubTab] = useState<'contatos' | 'conversas'>('contatos');
+  const [conversationGroups, setConversationGroups] = useState<ConversationGroup[]>([]);
+  const [isLoadingConvGroups, setIsLoadingConvGroups] = useState(true);
+  const [editingConvGroup, setEditingConvGroup] = useState<{ name: string; mode: 'whatsapp_group' | 'broadcast'; contactIds: string[] } | null>(null);
+  const [isSavingConvGroup, setIsSavingConvGroup] = useState(false);
+  const [pendingConvGroupDeleteId, setPendingConvGroupDeleteId] = useState<string | null>(null);
+  const [sendingToConvGroupId, setSendingToConvGroupId] = useState<string | null>(null);
+  const [broadcastText, setBroadcastText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ContactTab>('paciente');
   const [search, setSearch] = useState('');
@@ -125,9 +135,22 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
     }
   };
 
+  const fetchConversationGroups = async () => {
+    setIsLoadingConvGroups(true);
+    try {
+      const res = await apiService.getConversationGroups();
+      setConversationGroups(res.groups || []);
+    } catch (err: any) {
+      error('Erro ao carregar grupos de conversa', err.message);
+    } finally {
+      setIsLoadingConvGroups(false);
+    }
+  };
+
   useEffect(() => {
     fetchContacts();
     fetchGroups();
+    fetchConversationGroups();
   }, []);
 
   const tabCounts = useMemo(() => {
@@ -288,6 +311,69 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
     }
   };
 
+  const openNewConvGroupModal = () => {
+    setEditingConvGroup({ name: '', mode: 'broadcast', contactIds: [] });
+  };
+
+  const handleCreateConvGroup = async () => {
+    if (!editingConvGroup?.name.trim() || editingConvGroup.contactIds.length === 0) return;
+    if (editingConvGroup.mode === 'whatsapp_group' && editingConvGroup.contactIds.length < 2) {
+      error('Participantes insuficientes', 'Um grupo real do WhatsApp exige ao menos 2 contatos com telefone.');
+      return;
+    }
+    setIsSavingConvGroup(true);
+    try {
+      const res = await apiService.createConversationGroup({
+        name: editingConvGroup.name.trim(),
+        mode: editingConvGroup.mode,
+        contactIds: editingConvGroup.contactIds,
+      });
+      setConversationGroups((prev) => [...prev, res.group]);
+      success(
+        'Grupo Criado',
+        editingConvGroup.mode === 'whatsapp_group'
+          ? `Grupo real do WhatsApp "${res.group.name}" foi criado.`
+          : `Lista de disparo "${res.group.name}" foi criada.`
+      );
+      setEditingConvGroup(null);
+    } catch (err: any) {
+      error('Falha ao criar grupo de conversa', err.message);
+    } finally {
+      setIsSavingConvGroup(false);
+    }
+  };
+
+  const handleDeleteConvGroup = async () => {
+    if (!pendingConvGroupDeleteId) return;
+    try {
+      const res = await apiService.deleteConversationGroup(pendingConvGroupDeleteId);
+      setConversationGroups((prev) => prev.filter((g) => g.id !== pendingConvGroupDeleteId));
+      success('Grupo Removido', res.note);
+      setPendingConvGroupDeleteId(null);
+    } catch (err: any) {
+      error('Falha ao excluir grupo', err.message);
+      setPendingConvGroupDeleteId(null);
+    }
+  };
+
+  const handleSendToConvGroup = async (groupId: string) => {
+    if (!broadcastText.trim()) return;
+    setSendingToConvGroupId(groupId);
+    try {
+      const res = await apiService.sendConversationGroupMessage(groupId, broadcastText.trim());
+      if (res.mode === 'broadcast') {
+        success('Mensagem Enviada', `${res.sent} enviada(s) com sucesso${res.failed ? `, ${res.failed} falharam` : ''}.`);
+      } else {
+        success('Mensagem Enviada', 'A mensagem foi enviada ao grupo do WhatsApp.');
+      }
+      setBroadcastText('');
+    } catch (err: any) {
+      error('Falha ao enviar mensagem', err.message);
+    } finally {
+      setSendingToConvGroupId(null);
+    }
+  };
+
   const initials = (name?: string) =>
     (name || '?')
       .split(' ')
@@ -310,12 +396,12 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
           </div>
         </div>
         <button
-          onClick={activeTab === 'grupos' ? openNewGroupModal : openCreateModal}
+          onClick={activeTab === 'grupos' ? (groupsSubTab === 'conversas' ? openNewConvGroupModal : openNewGroupModal) : openCreateModal}
           className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
         >
           {activeTab === 'grupos' ? (
             <>
-              <FolderPlus className="w-3.5 h-3.5" /> Novo Grupo
+              <FolderPlus className="w-3.5 h-3.5" /> {groupsSubTab === 'conversas' ? 'Novo Grupo de Conversa' : 'Novo Grupo'}
             </>
           ) : (
             <>
@@ -359,37 +445,104 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
 
       {/* List */}
       {activeTab === 'grupos' ? (
-        isLoadingGroups ? (
-          <div className="text-center py-16 text-slate-400 text-xs">Carregando grupos...</div>
-        ) : groups.length === 0 ? (
-          <div className="text-center py-16 text-slate-400 text-xs">Nenhum grupo criado ainda.</div>
-        ) : (
-          <div className="space-y-2">
-            {groups.map((group) => (
-              <div key={group.id} className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                    <Folder className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-xs text-slate-900 truncate">{group.name}</div>
-                    <div className="text-[11px] text-slate-500 truncate">
-                      {group.description ? `${group.description} • ` : ''}{(group.contactIds || []).length} contato{(group.contactIds || []).length !== 1 ? 's' : ''}
+        <>
+          {/* Sub-alternador: Grupos de Contatos (organização interna) vs Grupos de Conversa (WhatsApp real ou disparo em massa) */}
+          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit mb-1">
+            <button
+              onClick={() => setGroupsSubTab('contatos')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${groupsSubTab === 'contatos' ? 'bg-white text-sky-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Grupos de Contatos
+            </button>
+            <button
+              onClick={() => setGroupsSubTab('conversas')}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${groupsSubTab === 'conversas' ? 'bg-white text-sky-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Grupos de Conversa
+            </button>
+          </div>
+
+          {groupsSubTab === 'contatos' ? (
+            isLoadingGroups ? (
+              <div className="text-center py-16 text-slate-400 text-xs">Carregando grupos...</div>
+            ) : groups.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 text-xs">Nenhum grupo criado ainda.</div>
+            ) : (
+              <div className="space-y-2">
+                {groups.map((group) => (
+                  <div key={group.id} className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        <Folder className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-slate-900 truncate">{group.name}</div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {group.description ? `${group.description} • ` : ''}{(group.contactIds || []).length} contato{(group.contactIds || []).length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => setEditingGroup(group)} className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setPendingGroupDeleteId(group.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => setEditingGroup(group)} className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-slate-50 rounded-lg transition-colors">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => setPendingGroupDeleteId(group.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )
+            )
+          ) : isLoadingConvGroups ? (
+            <div className="text-center py-16 text-slate-400 text-xs">Carregando grupos de conversa...</div>
+          ) : conversationGroups.length === 0 ? (
+            <div className="text-center py-16 text-slate-400 text-xs">Nenhum grupo de conversa criado ainda.</div>
+          ) : (
+            <div className="space-y-2">
+              {conversationGroups.map((cg) => (
+                <div key={cg.id} className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${cg.mode === 'whatsapp_group' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-xs text-slate-900 truncate">{cg.name}</span>
+                          <span className={`shrink-0 px-1.5 py-0.2 rounded text-[9px] font-bold ${cg.mode === 'whatsapp_group' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {cg.mode === 'whatsapp_group' ? 'Grupo WhatsApp' : 'Disparo em Massa'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">{(cg.contactIds || []).length} contato{(cg.contactIds || []).length !== 1 ? 's' : ''}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => setPendingConvGroupDeleteId(cg.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <input
+                      type="text"
+                      placeholder={cg.mode === 'whatsapp_group' ? 'Mensagem para o grupo...' : 'Mensagem para disparar a todos...'}
+                      value={sendingToConvGroupId === cg.id ? broadcastText : ''}
+                      onFocus={() => setBroadcastText('')}
+                      onChange={(e) => setBroadcastText(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-[11px]"
+                    />
+                    <button
+                      onClick={() => handleSendToConvGroup(cg.id)}
+                      disabled={sendingToConvGroupId === cg.id || !broadcastText.trim()}
+                      className="shrink-0 px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[11px] font-bold disabled:opacity-40 transition-colors"
+                    >
+                      {sendingToConvGroupId === cg.id ? 'Enviando...' : 'Enviar'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       ) : isLoading ? (
         <div className="text-center py-16 text-slate-400 text-xs">Carregando contatos...</div>
       ) : filteredContacts.length === 0 ? (
@@ -633,6 +786,118 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
                 Cancelar
               </button>
               <button onClick={handleDeleteGroup} className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors">
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de criar grupo de conversa */}
+      {editingConvGroup && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onClick={() => !isSavingConvGroup && setEditingConvGroup(null)}>
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full space-y-3 shadow-xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-sky-600" /> Novo Grupo de Conversa
+              </h4>
+              <button onClick={() => setEditingConvGroup(null)} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-xs space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Nome do grupo</label>
+                <input
+                  type="text"
+                  placeholder="Ex.: Turma de Fisioterapia, Promoção Outubro"
+                  value={editingConvGroup.name}
+                  onChange={(e) => setEditingConvGroup((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1.5">Como as mensagens devem ser enviadas?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, mode: 'whatsapp_group' } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      editingConvGroup.mode === 'whatsapp_group' ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Grupo Real do WhatsApp</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Todos se veem e recebem as mensagens uns dos outros.</div>
+                  </button>
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, mode: 'broadcast' } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      editingConvGroup.mode === 'broadcast' ? 'bg-amber-50 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Disparo em Massa</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Cada um recebe individualmente, sem ver os demais.</div>
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <label className="block font-semibold text-slate-600 mb-1">
+                  Contatos {editingConvGroup.mode === 'whatsapp_group' && <span className="text-slate-400 font-normal">(mínimo 2, com telefone)</span>}
+                </label>
+                <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 rounded-xl p-1.5">
+                  {contacts.filter((c) => c.phone).length === 0 ? (
+                    <p className="text-center text-slate-400 py-3">Nenhum contato com telefone cadastrado.</p>
+                  ) : (
+                    contacts.filter((c) => c.phone).map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingConvGroup.contactIds.includes(c.id)}
+                          onChange={(e) =>
+                            setEditingConvGroup((prev) => {
+                              if (!prev) return prev;
+                              return { ...prev, contactIds: e.target.checked ? [...prev.contactIds, c.id] : prev.contactIds.filter((id) => id !== c.id) };
+                            })
+                          }
+                        />
+                        <span className={`shrink-0 px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                          c.type === 'paciente' ? 'bg-emerald-100 text-emerald-700' : c.type === 'lead' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {c.type === 'paciente' ? 'PAC' : c.type === 'lead' ? 'LEAD' : 'OUTRO'}
+                        </span>
+                        <span className="truncate">{c.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEditingConvGroup(null)} disabled={isSavingConvGroup} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateConvGroup}
+                disabled={isSavingConvGroup || !editingConvGroup.name.trim() || editingConvGroup.contactIds.length === 0}
+                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs disabled:opacity-40 transition-colors"
+              >
+                {isSavingConvGroup ? 'Criando...' : 'Criar Grupo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de exclusão de grupo de conversa */}
+      {pendingConvGroupDeleteId && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+            <h4 className="font-bold text-slate-900 text-sm">Excluir este grupo de conversa?</h4>
+            <p className="text-slate-500 text-xs">Se for um grupo real do WhatsApp, ele continua existindo lá — isso só remove o registro daqui.</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setPendingConvGroupDeleteId(null)} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs">
+                Cancelar
+              </button>
+              <button onClick={handleDeleteConvGroup} className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors">
                 Excluir
               </button>
             </div>

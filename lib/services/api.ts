@@ -25,6 +25,7 @@ import {
   ContactGroup,
   InternalChatThread,
   InternalChatMessage,
+  ConversationGroup,
   TabId,
   SensitiveAction,
   Funnel,
@@ -733,6 +734,35 @@ export const apiService = {
     return authFetch<{ success: boolean; markedCount: number }>(
       `/api/internal-chat/threads/${encodeURIComponent(threadId)}/read`,
       { method: "POST" },
+    );
+  },
+
+  // 11.9 Grupos de Conversa — diferente de ContactGroup (organização
+  // interna) e de InternalChatThread em grupo (conversa entre
+  // usuários da equipe). Cobre 2 modos: grupo REAL do WhatsApp (todos
+  // se veem) ou disparo em massa/broadcast (cada um recebe
+  // individualmente, sem saber dos demais).
+  async getConversationGroups() {
+    return authFetch<{ groups: ConversationGroup[] }>("/api/conversation-groups");
+  },
+
+  async createConversationGroup(payload: { name: string; mode: 'whatsapp_group' | 'broadcast'; contactIds: string[]; description?: string }) {
+    return authFetch<{ group: ConversationGroup }>("/api/conversation-groups", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteConversationGroup(id: string) {
+    return authFetch<{ success: boolean; note: string }>(`/api/conversation-groups?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async sendConversationGroupMessage(groupId: string, text: string) {
+    return authFetch<{ success: boolean; mode: 'whatsapp_group' | 'broadcast'; sent?: number; failed?: number; errors?: { contactId: string; name: string; message: string }[] }>(
+      `/api/conversation-groups/${encodeURIComponent(groupId)}/send`,
+      { method: "POST", body: JSON.stringify({ text }) },
     );
   },
 
