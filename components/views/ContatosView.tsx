@@ -265,6 +265,8 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   };
 
   const openNewGroupModal = () => {
+    setActiveTab('grupos');
+    setGroupsSubTab('contatos');
     setEditingGroup({ name: '', description: '', contactIds: [] });
   };
 
@@ -312,6 +314,8 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   };
 
   const openNewConvGroupModal = () => {
+    setActiveTab('grupos');
+    setGroupsSubTab('conversas');
     setEditingConvGroup({ name: '', mode: 'broadcast', contactIds: [] });
   };
 
@@ -395,20 +399,28 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
             <p className="text-xs text-slate-500">Pacientes, leads e outros contatos, tudo num só lugar.</p>
           </div>
         </div>
-        <button
-          onClick={activeTab === 'grupos' ? (groupsSubTab === 'conversas' ? openNewConvGroupModal : openNewGroupModal) : openCreateModal}
-          className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-        >
-          {activeTab === 'grupos' ? (
-            <>
-              <FolderPlus className="w-3.5 h-3.5" /> {groupsSubTab === 'conversas' ? 'Novo Grupo de Conversa' : 'Novo Grupo'}
-            </>
-          ) : (
-            <>
-              <UserPlus className="w-3.5 h-3.5" /> {activeTab === 'paciente' ? 'Novo Lead' : `Novo ${activeTab === 'lead' ? 'Lead' : 'Contato'}`}
-            </>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={openNewGroupModal}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition-colors"
+          >
+            <FolderPlus className="w-3.5 h-3.5" /> Grupo de Contatos
+          </button>
+          <button
+            onClick={openNewConvGroupModal}
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-colors"
+          >
+            <MessageSquare className="w-3.5 h-3.5" /> Grupo de Conversa
+          </button>
+          {activeTab !== 'grupos' && (
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> {activeTab === 'paciente' ? 'Novo Lead' : `Novo ${activeTab === 'lead' ? 'Lead' : 'Contato'}`}
+          </button>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -164,18 +164,16 @@ export function ChatInternoView() {
       {/* Coluna de conversas */}
       <div className={`${selectedThreadId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 shrink-0 bg-white border-r border-slate-200 flex-col`}>
         <div className="p-4 border-b border-slate-200 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-              <MessageCircle className="w-4 h-4 text-sky-600" /> Chat Interno
-            </h2>
-            <div className="flex items-center gap-1">
-              <button onClick={openNewGroupModal} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" title="Novo grupo">
-                <Users className="w-4 h-4" />
-              </button>
-              <button onClick={openNewChatModal} className="p-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors" title="Nova conversa">
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
+          <h2 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+            <MessageCircle className="w-4 h-4 text-sky-600" /> Chat Interno
+          </h2>
+          <div className="flex items-center gap-2">
+            <button onClick={openNewChatModal} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[11px] font-bold transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Nova Conversa
+            </button>
+            <button onClick={openNewGroupModal} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-bold transition-colors">
+              <Users className="w-3.5 h-3.5" /> Novo Grupo
+            </button>
           </div>
         </div>
 
