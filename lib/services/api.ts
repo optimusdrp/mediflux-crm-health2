@@ -26,6 +26,7 @@ import {
   InternalChatThread,
   InternalChatMessage,
   ConversationGroup,
+  ConversationGroupMessage,
   TabId,
   SensitiveAction,
   Funnel,
@@ -746,7 +747,16 @@ export const apiService = {
     return authFetch<{ groups: ConversationGroup[] }>("/api/conversation-groups");
   },
 
-  async createConversationGroup(payload: { name: string; mode: 'whatsapp_group' | 'broadcast'; contactIds: string[]; description?: string }) {
+  async createConversationGroup(payload: {
+    name: string;
+    mode: 'whatsapp_group' | 'broadcast';
+    contactIds: string[];
+    description?: string;
+    /** Onde o card aparece na fila de Atendimentos — padrão 'destacado' quando omitido. */
+    queuePosition?: ConversationGroup['queuePosition'];
+    /** Se o card mostra um chat de verdade com respostas, ou fica só como registro — padrão true quando omitido. */
+    showReplies?: boolean;
+  }) {
     return authFetch<{ group: ConversationGroup }>("/api/conversation-groups", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -763,6 +773,27 @@ export const apiService = {
     return authFetch<{ success: boolean; mode: 'whatsapp_group' | 'broadcast'; sent?: number; failed?: number; errors?: { contactId: string; name: string; message: string }[] }>(
       `/api/conversation-groups/${encodeURIComponent(groupId)}/send`,
       { method: "POST", body: JSON.stringify({ text }) },
+    );
+  },
+
+  async updateConversationGroup(payload: {
+    id: string;
+    name?: string;
+    queuePosition?: ConversationGroup['queuePosition'];
+    showReplies?: boolean;
+    silenced?: boolean;
+    /** Remove só este contato do grupo — o atendimento normal dele não é afetado. */
+    removeContactId?: string;
+  }) {
+    return authFetch<{ group: ConversationGroup }>("/api/conversation-groups", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getConversationGroupMessages(groupId: string) {
+    return authFetch<{ messages: ConversationGroupMessage[] }>(
+      `/api/conversation-groups/${encodeURIComponent(groupId)}/messages`,
     );
   },
 

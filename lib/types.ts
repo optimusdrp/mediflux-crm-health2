@@ -315,8 +315,43 @@ export interface ConversationGroup {
   contactIds: string[];
   /** Preenchido só quando mode === 'whatsapp_group', após a criação bem-sucedida no WhatsApp real. */
   whatsappGroupId?: string;
+  /**
+   * Onde o card do grupo aparece na fila de Atendimentos — escolhido
+   * na criação, alterável depois a qualquer momento:
+   *  - 'destacado': seção própria, acima da lista normal de pacientes.
+   *  - 'misturado': dentro da lista normal, com um ícone de grupo para diferenciar visualmente.
+   */
+  queuePosition: 'destacado' | 'misturado';
+  /**
+   * Se o card do grupo, ao ser aberto, mostra um chat de verdade com
+   * as respostas que os contatos derem (true) ou fica só como um
+   * registro do que foi disparado, sem receber respostas ali (false)
+   * — também escolhido na criação, alterável depois.
+   */
+  showReplies: boolean;
+  /** Silencia notificações sonoras/pop-up de novas mensagens deste grupo — não afeta o recebimento em si, só o alerta. */
+  silenced?: boolean;
   createdAt: string;
   createdByUserId?: string;
+}
+
+/**
+ * Mensagem dentro de um grupo de conversa — só existe quando
+ * ConversationGroup.showReplies é true; 'inbound' é uma resposta
+ * recebida de algum contato do grupo, 'outbound' é uma mensagem que
+ * o atendente mandou para o grupo inteiro.
+ */
+export interface ConversationGroupMessage {
+  id: string;
+  clinicId: string;
+  groupId: string;
+  direction: 'inbound' | 'outbound';
+  /** Preenchido só em mensagens inbound — de qual contato veio a resposta. */
+  contactId?: string;
+  contactName?: string;
+  senderUserId?: string;
+  text: string;
+  timestamp: string;
 }
 
 /**

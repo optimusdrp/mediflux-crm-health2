@@ -85,7 +85,7 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const [groupsSubTab, setGroupsSubTab] = useState<'contatos' | 'conversas'>('contatos');
   const [conversationGroups, setConversationGroups] = useState<ConversationGroup[]>([]);
   const [isLoadingConvGroups, setIsLoadingConvGroups] = useState(true);
-  const [editingConvGroup, setEditingConvGroup] = useState<{ name: string; mode: 'whatsapp_group' | 'broadcast'; contactIds: string[] } | null>(null);
+  const [editingConvGroup, setEditingConvGroup] = useState<{ name: string; mode: 'whatsapp_group' | 'broadcast'; contactIds: string[]; queuePosition: 'destacado' | 'misturado'; showReplies: boolean } | null>(null);
   const [isSavingConvGroup, setIsSavingConvGroup] = useState(false);
   const [pendingConvGroupDeleteId, setPendingConvGroupDeleteId] = useState<string | null>(null);
   const [sendingToConvGroupId, setSendingToConvGroupId] = useState<string | null>(null);
@@ -316,7 +316,7 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const openNewConvGroupModal = () => {
     setActiveTab('grupos');
     setGroupsSubTab('conversas');
-    setEditingConvGroup({ name: '', mode: 'broadcast', contactIds: [] });
+    setEditingConvGroup({ name: '', mode: 'broadcast', contactIds: [], queuePosition: 'destacado', showReplies: true });
   };
 
   const handleCreateConvGroup = async () => {
@@ -331,6 +331,8 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
         name: editingConvGroup.name.trim(),
         mode: editingConvGroup.mode,
         contactIds: editingConvGroup.contactIds,
+        queuePosition: editingConvGroup.queuePosition,
+        showReplies: editingConvGroup.showReplies,
       });
       setConversationGroups((prev) => [...prev, res.group]);
       success(
@@ -848,6 +850,56 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
                   >
                     <div className="font-bold text-[11px]">Disparo em Massa</div>
                     <div className="text-[10px] text-slate-500 mt-0.5">Cada um recebe individualmente, sem ver os demais.</div>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1.5">
+                  Posição na fila de Atendimentos <span className="text-slate-400 font-normal">(pode mudar depois)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, queuePosition: 'destacado' } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      editingConvGroup.queuePosition === 'destacado' ? 'bg-sky-50 border-sky-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Destacado</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Seção própria, acima da fila normal.</div>
+                  </button>
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, queuePosition: 'misturado' } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      editingConvGroup.queuePosition === 'misturado' ? 'bg-sky-50 border-sky-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Misturado</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Junto com os atendimentos normais.</div>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1.5">
+                  Ao abrir o card <span className="text-slate-400 font-normal">(pode mudar depois)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, showReplies: true } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      editingConvGroup.showReplies ? 'bg-sky-50 border-sky-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Mostrar Respostas</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Vira um chat de verdade com as respostas.</div>
+                  </button>
+                  <button
+                    onClick={() => setEditingConvGroup((prev) => (prev ? { ...prev, showReplies: false } : prev))}
+                    className={`p-2.5 rounded-xl border text-left transition-colors ${
+                      !editingConvGroup.showReplies ? 'bg-sky-50 border-sky-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-[11px]">Só Registro</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Não mostra respostas, só o disparo.</div>
                   </button>
                 </div>
               </div>

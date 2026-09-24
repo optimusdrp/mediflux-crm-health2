@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Patient, ChatMessage, UrgencyLevel, TriageResult, QuickResponse } from '@/lib/types';
+import { Patient, ChatMessage, UrgencyLevel, TriageResult, QuickResponse, ConversationGroup } from '@/lib/types';
+import { GroupConversationPanel } from './GroupConversationPanel';
 import { FALLBACK_PATIENTS } from '@/lib/data/fallbackSeed';
 import { apiService } from '@/lib/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import {
+  Users as UsersIcon,
+  BellOff as BellOffIcon,
   Search,
   Filter,
   Send,
@@ -59,6 +62,9 @@ export function AtendimentosView({
 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  /** Quando preenchido, o painel central mostra a conversa do grupo em vez do chat normal de paciente — os dois nunca ficam selecionados juntos. */
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [conversationGroups, setConversationGroups] = useState<ConversationGroup[]>([]);
   // Distingue "a tela ainda não selecionou ninguém" (deve auto-selecionar
   // o primeiro da fila) de "o usuário voltou à fila de propósito" (não
   // deve reselecionar sozinho — botão "Voltar à fila" em telas pequenas).
@@ -401,6 +407,21 @@ export function AtendimentosView({
       .catch(() => {
         // Silencioso — a tela funciona normalmente sem a barra populada;
         // o usuário ainda pode digitar a mensagem manualmente.
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    apiService
+      .getConversationGroups()
+      .then((res) => {
+        if (isMounted) setConversationGroups(res.groups || []);
+      })
+      .catch(() => {
+        // Silencioso — a fila de Atendimentos funciona normalmente mesmo sem os cards de grupo.
       });
     return () => {
       isMounted = false;
@@ -937,14 +958,69 @@ export function AtendimentosView({
           )}
         </div>
 
+        {/* Grupos de Conversa — destacados aparecem aqui, acima da fila normal; misturados aparecem dentro da lista (ver abaixo). */}
+        {conversationGroups.filter((g) => g.queuePosition === 'destacado').length > 0 && (
+          <div className="border-b border-slate-200 bg-indigo-50/40 divide-y divide-indigo-100">
+            {conversationGroups.filter((g) => g.queuePosition === 'destacado').map((g) => (
+              <div
+                key={g.id}
+                onClick={() => {
+                  hasEverSelectedRef.current = true;
+                  setSelectedPatientId('');
+                  setSelectedGroupId(g.id);
+                }}
+                className={`p-3 cursor-pointer transition-all flex items-center gap-2.5 ${
+                  selectedGroupId === g.id ? 'bg-indigo-100' : 'hover:bg-indigo-50'
+                }`}
+              >
+                <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  <UsersIcon className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-xs text-slate-900 truncate flex items-center gap-1.5">
+                    {g.name}
+                    {g.silenced && <BellOffIcon className="w-3 h-3 text-slate-400 shrink-0" />}
+                  </div>
+                  <div className="text-[10px] text-slate-500">{g.contactIds.length} contatos • {g.mode === 'whatsapp_group' ? 'Grupo WhatsApp' : 'Disparo em Massa'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Patients List Scrollable */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
           {isLoadingPatients ? (
             <div className="p-8 text-center text-xs text-slate-400">Carregando fila...</div>
-          ) : patients.length === 0 ? (
+          ) : patients.length === 0 && conversationGroups.filter((g) => g.queuePosition === 'misturado').length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400">Nenhum atendimento localizado.</div>
           ) : (
-            visiblePatients.map((p) => {
+            <>
+              {conversationGroups.filter((g) => g.queuePosition === 'misturado').map((g) => (
+                <div
+                  key={g.id}
+                  onClick={() => {
+                    hasEverSelectedRef.current = true;
+                    setSelectedPatientId('');
+                    setSelectedGroupId(g.id);
+                  }}
+                  className={`p-3 cursor-pointer transition-all flex items-center gap-2.5 ${
+                    selectedGroupId === g.id ? 'bg-sky-50/80 border-r-2 border-r-sky-600' : 'hover:bg-slate-50 bg-white'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                    <UsersIcon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs text-slate-900 truncate flex items-center gap-1.5">
+                      {g.name}
+                      {g.silenced && <BellOffIcon className="w-3 h-3 text-slate-400 shrink-0" />}
+                    </div>
+                    <div className="text-[10px] text-slate-500">{g.contactIds.length} contatos • {g.mode === 'whatsapp_group' ? 'Grupo WhatsApp' : 'Disparo em Massa'}</div>
+                  </div>
+                </div>
+              ))}
+              {visiblePatients.map((p) => {
               const isSelected = p.id === selectedPatientId;
               const uStyle = urgencyStyles[p.urgency] || urgencyStyles.media;
 
@@ -953,6 +1029,7 @@ export function AtendimentosView({
                   key={p.id}
                   onClick={() => {
                     hasEverSelectedRef.current = true;
+                    setSelectedGroupId('');
                     setSelectedPatientId(p.id);
                   }}
                   className={`p-3 cursor-pointer transition-all ${uStyle.border} ${
@@ -1001,16 +1078,31 @@ export function AtendimentosView({
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </div>
 
       {/* COLUMN 2: Chat Stream & Omnichannel Messenger — em telas pequenas, só aparece com paciente
           selecionado (a Coluna 1 já se escondeu acima); sem seleção, fica oculta, evitando o chat
-          vazio aparecer empilhado sob a fila inteira. */}
-      <div className={`${selectedPatientId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full bg-slate-50 border-r border-slate-200`}>
-        {selectedPatient ? (
+          vazio aparecer empilhado sob a fila inteira. Quando um grupo de conversa está selecionado
+          (selectedGroupId), mostra GroupConversationPanel no lugar do chat normal — os dois nunca
+          ficam selecionados ao mesmo tempo (ver os onClick dos cards de grupo e de paciente). */}
+      <div className={`${selectedPatientId || selectedGroupId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col h-full bg-slate-50 border-r border-slate-200`}>
+        {selectedGroupId ? (
+          (() => {
+            const selectedGroup = conversationGroups.find((g) => g.id === selectedGroupId);
+            if (!selectedGroup) return null;
+            return (
+              <GroupConversationPanel
+                group={selectedGroup}
+                onGroupUpdated={(updated) => setConversationGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)))}
+                onBack={() => setSelectedGroupId('')}
+              />
+            );
+          })()
+        ) : selectedPatient ? (
           <>
             {/* Chat Top Bar — em duas linhas em telas pequenas (nome+ações / detalhes),
                 evitando que tudo se espreme numa linha só e sobreponha. */}
