@@ -797,6 +797,22 @@ export const apiService = {
     );
   },
 
+  // 11.10 Sincronização com WhatsApp — contatos que já existiam na
+  // instância conectada, antes do MediFlux. Nunca importa nada
+  // sozinho: só lista, a importação é ação explícita do usuário.
+  async getWhatsAppContacts() {
+    return authFetch<{
+      contacts: { remoteJid: string; name: string; phone: string; profilePicUrl?: string; alreadyImported: boolean }[];
+    }>("/api/whatsapp/contacts");
+  },
+
+  async importWhatsAppContact(payload: { remoteJid: string; phone: string; name: string }) {
+    return authFetch<{ patient: Patient; importedMessagesCount: number }>("/api/whatsapp/import-contact", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.
   // Rotas novas: antes não existia nenhuma tela dedicada de gestão de
   // equipe — a lista de usuários só aparecia embutida em

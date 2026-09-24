@@ -25,13 +25,14 @@ interface ContatosViewProps {
   onSelectPatient: (id: string) => void;
 }
 
-type ContactTab = 'paciente' | 'lead' | 'outro' | 'grupos';
+type ContactTab = 'paciente' | 'lead' | 'outro' | 'grupos' | 'whatsapp';
 
 const TAB_LABELS: Record<ContactTab, string> = {
   paciente: 'Pacientes',
   lead: 'Leads',
   outro: 'Outros Contatos',
   grupos: 'Grupos',
+  whatsapp: 'WhatsApp',
 };
 
 const LEAD_STATUS_LABELS: Record<string, string> = {
@@ -90,6 +91,12 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
   const [pendingConvGroupDeleteId, setPendingConvGroupDeleteId] = useState<string | null>(null);
   const [sendingToConvGroupId, setSendingToConvGroupId] = useState<string | null>(null);
   const [broadcastText, setBroadcastText] = useState('');
+
+  const [whatsappContacts, setWhatsappContacts] = useState<{ remoteJid: string; name: string; phone: string; profilePicUrl?: string; alreadyImported: boolean }[]>([]);
+  const [isLoadingWhatsappContacts, setIsLoadingWhatsappContacts] = useState(false);
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
+  const [importingRemoteJid, setImportingRemoteJid] = useState<string | null>(null);
+  const [hasLoadedWhatsapp, setHasLoadedWhatsapp] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ContactTab>('paciente');
   const [search, setSearch] = useState('');
@@ -152,6 +159,13 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
     fetchGroups();
     fetchConversationGroups();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'whatsapp' && !hasLoadedWhatsapp && !isLoadingWhatsappContacts) {
+      fetchWhatsappContacts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const tabCounts = useMemo(() => {
     return {
@@ -380,6 +394,37 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
     }
   };
 
+  const fetchWhatsappContacts = async () => {
+    setIsLoadingWhatsappContacts(true);
+    setWhatsappError(null);
+    try {
+      const res = await apiService.getWhatsAppContacts();
+      setWhatsappContacts(res.contacts || []);
+      setHasLoadedWhatsapp(true);
+    } catch (err: any) {
+      setWhatsappError(err.message);
+    } finally {
+      setIsLoadingWhatsappContacts(false);
+    }
+  };
+
+  const handleImportWhatsappContact = async (contact: { remoteJid: string; phone: string; name: string }) => {
+    setImportingRemoteJid(contact.remoteJid);
+    try {
+      const res = await apiService.importWhatsAppContact(contact);
+      setWhatsappContacts((prev) => prev.map((c) => (c.remoteJid === contact.remoteJid ? { ...c, alreadyImported: true } : c)));
+      success(
+        'Contato Importado',
+        `"${contact.name}" foi importado${res.importedMessagesCount > 0 ? ` com ${res.importedMessagesCount} mensagem(ns) do histórico` : ''}.`
+      );
+      fetchContacts();
+    } catch (err: any) {
+      error('Falha ao importar', err.message);
+    } finally {
+      setImportingRemoteJid(null);
+    }
+  };
+
   const initials = (name?: string) =>
     (name || '?')
       .split(' ')
@@ -414,7 +459,7 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
           >
             <MessageSquare className="w-3.5 h-3.5" /> Grupo de Conversa
           </button>
-          {activeTab !== 'grupos' && (
+          {activeTab !== 'grupos' && activeTab !== 'whatsapp' && (
           <button
             onClick={openCreateModal}
             className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
@@ -427,7 +472,7 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
 
       {/* Tabs */}
       <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit flex-wrap">
-        {(['paciente', 'lead', 'outro', 'grupos'] as ContactTab[]).map((tab) => (
+        {(['paciente', 'lead', 'outro', 'grupos', 'whatsapp'] as ContactTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -436,15 +481,17 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
             }`}
           >
             {TAB_LABELS[tab]}
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === tab ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'}`}>
-              {tab === 'grupos' ? groups.length : tabCounts[tab]}
-            </span>
+            {tab !== 'whatsapp' && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === tab ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'}`}>
+                {tab === 'grupos' ? groups.length : tabCounts[tab]}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Search */}
-      {activeTab !== 'grupos' && (
+      {activeTab !== 'grupos' && activeTab !== 'whatsapp' && (
       <div className="relative max-w-sm">
         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
         <input
@@ -557,6 +604,52 @@ export function ContatosView({ onSelectPatient }: ContatosViewProps) {
             </div>
           )}
         </>
+      ) : activeTab === 'whatsapp' ? (
+        <div className="space-y-2">
+          {isLoadingWhatsappContacts ? (
+            <div className="text-center py-16 text-slate-400 text-xs">Buscando contatos no WhatsApp conectado...</div>
+          ) : whatsappError ? (
+            <div className="text-center py-16 space-y-2">
+              <p className="text-rose-600 text-xs max-w-sm mx-auto">{whatsappError}</p>
+              <button onClick={fetchWhatsappContacts} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors">
+                Tentar novamente
+              </button>
+            </div>
+          ) : whatsappContacts.length === 0 ? (
+            <div className="text-center py-16 text-slate-400 text-xs">Nenhum contato encontrado na instância do WhatsApp conectada.</div>
+          ) : (
+            whatsappContacts.map((c) => (
+              <div key={c.remoteJid} className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {c.profilePicUrl ? (
+                    <img src={c.profilePicUrl} alt={c.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                      {initials(c.name)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-bold text-xs text-slate-900 truncate">{c.name}</div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {c.phone}
+                    </div>
+                  </div>
+                </div>
+                {c.alreadyImported ? (
+                  <span className="shrink-0 px-2.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold">Já importado</span>
+                ) : (
+                  <button
+                    onClick={() => handleImportWhatsappContact(c)}
+                    disabled={importingRemoteJid === c.remoteJid}
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[11px] font-bold disabled:opacity-40 transition-colors"
+                  >
+                    {importingRemoteJid === c.remoteJid ? 'Importando...' : 'Importar'}
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       ) : isLoading ? (
         <div className="text-center py-16 text-slate-400 text-xs">Carregando contatos...</div>
       ) : filteredContacts.length === 0 ? (
