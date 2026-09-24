@@ -813,6 +813,14 @@ export const apiService = {
     });
   },
 
+  /** Importa vários contatos do WhatsApp de uma vez — usada pelo pop-up exibido ao conectar/reconectar. */
+  async bulkImportWhatsAppContacts(payload: { asPatient: boolean; contacts: { remoteJid: string; phone: string; name: string }[] }) {
+    return authFetch<{ success: boolean; importedCount: number; skippedCount: number; skippedNames: string[] }>(
+      "/api/whatsapp/bulk-import",
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+  },
+
   // 11.6 Gestão de Usuários — CRUD completo, restrito a administrador.
   // Rotas novas: antes não existia nenhuma tela dedicada de gestão de
   // equipe — a lista de usuários só aparecia embutida em

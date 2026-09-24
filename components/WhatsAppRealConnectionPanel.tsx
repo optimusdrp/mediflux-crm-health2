@@ -19,14 +19,8 @@ import { useToast } from '@/contexts/ToastContext';
 // a Evolution API diretamente (ver lib/evolutionApi.ts na Lambda).
 // ---------------------------------------------------------------------------
 
-type WaStatus = 'disconnected' | 'initializing' | 'qr_pending' | 'phone_code_pending' | 'syncing_history' | 'connected' | 'auth_failed';
+type WaStatus = 'disconnected' | 'initializing' | 'qr_pending' | 'phone_code_pending' | 'connected' | 'auth_failed';
 type WaAuthMethod = 'qr' | 'phone_number';
-
-interface HistorySyncResult {
-  chatsScanned: number;
-  chatsWithUnread: number;
-  messagesImported: number;
-}
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -37,9 +31,16 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
   const [pairingCode, setPairingCode] = useState<string | undefined>();
   const [connectedNumber, setConnectedNumber] = useState<string | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
-  const [historySyncResult, setHistorySyncResult] = useState<HistorySyncResult | undefined>();
-  const [historySyncError, setHistorySyncError] = useState<string | undefined>();
   const [isActing, setIsActing] = useState(false);
+  /**
+   * Abre o pop-up de importação assim que a conexão passa de
+   * qualquer outro estado para 'connected' pela primeira vez nesta
+   * sessão da tela — nunca reabre sozinho num poll seguinte que
+   * ainda esteja 'connected' (ver applyStatus, que só dispara isso
+   * na transição, checando o status anterior via prevStatusRef).
+   */
+  const [showImportPrompt, setShowImportPrompt] = useState(false);
+  const prevStatusRef = useRef<WaStatus>('disconnected');
 
   // Escolha de método antes de conectar — só relevante enquanto
   // "disconnected"; depois de iniciar, o método fica fixo até
@@ -63,19 +64,23 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
       pairingCode?: string;
       connectedNumber?: string;
       lastError?: string;
-      historySyncResult?: HistorySyncResult;
-      historySyncError?: string;
     }) => {
       setStatus(s.status as WaStatus);
       setQrDataUrl(s.qrDataUrl);
       setPairingCode(s.pairingCode);
       setConnectedNumber(s.connectedNumber);
       setLastError(s.lastError);
-      if (s.historySyncResult) setHistorySyncResult(s.historySyncResult);
-      if (s.historySyncError) setHistorySyncError(s.historySyncError);
-      // Continua o polling durante "syncing_history" — só para quando
-      // chega num estado final (conectado ou falha) ou volta a
-      // desconectado.
+      // Abre o pop-up de importação só na TRANSIÇÃO para 'connected'
+      // (veio de qualquer outro estado) — nunca de novo enquanto a
+      // tela continua 'connected' num poll seguinte, e nunca ao
+      // recarregar a página já conectada (prevStatusRef começa em
+      // 'disconnected', mas o primeiro poll real após montar já teria
+      // vindo de outro estado transitório antes de chegar aqui).
+      if (s.status === 'connected' && prevStatusRef.current !== 'connected') {
+        setShowImportPrompt(true);
+      }
+      prevStatusRef.current = s.status as WaStatus;
+      // Só para o polling quando chega num estado final (conectado ou falha) ou volta a desconectado.
       if (s.status === 'connected' || s.status === 'auth_failed' || s.status === 'disconnected') {
         stopPolling();
       }
@@ -107,7 +112,7 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (status === 'initializing' || status === 'qr_pending' || status === 'phone_code_pending' || status === 'syncing_history') {
+    if (status === 'initializing' || status === 'qr_pending' || status === 'phone_code_pending') {
       startPolling();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,8 +148,8 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
       setQrDataUrl(undefined);
       setPairingCode(undefined);
       setConnectedNumber(undefined);
-      setHistorySyncResult(undefined);
       setPhoneInput('');
+      prevStatusRef.current = 'disconnected';
       success('WhatsApp desconectado', 'A sessão foi encerrada. Será necessário conectar novamente (QR code ou código de pareamento) para reconectar.');
     } catch (err: any) {
       showErrorToast('Não foi possível desconectar', err?.message || 'Tente novamente em instantes.');
@@ -288,13 +293,6 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
         </div>
       )}
 
-      {status === 'syncing_history' && (
-        <div className="flex items-center gap-2 text-[11px] text-slate-600 py-2">
-          <History className="w-4 h-4 animate-pulse text-emerald-600" />
-          Conectado! Importando o histórico de conversas com mensagens não lidas...
-        </div>
-      )}
-
       {status === 'connected' && (
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 text-emerald-700">
@@ -304,27 +302,6 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
           <p className="text-[11px] text-slate-600">
             As mensagens recebidas neste número aparecem na Caixa de Entrada de Atendimentos.
           </p>
-          {historySyncResult && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-[10.5px] text-emerald-800">
-              <p className="font-semibold flex items-center gap-1.5">
-                <History className="w-3 h-3" />
-                Histórico importado na conexão:
-              </p>
-              <p className="mt-1">
-                {historySyncResult.chatsWithUnread} conversa(s) com mensagens não lidas encontrada(s) —{' '}
-                {historySyncResult.messagesImported} mensagem(ns) trazida(s) para a Caixa de Entrada.
-              </p>
-            </div>
-          )}
-          {historySyncError && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[10.5px] text-amber-800">
-              <p className="font-semibold flex items-center gap-1.5">
-                <History className="w-3 h-3" />
-                Histórico anterior não importado
-              </p>
-              <p className="mt-1">{historySyncError}</p>
-            </div>
-          )}
           <button
             type="button"
             onClick={handleDisconnect}
@@ -364,6 +341,110 @@ export const WhatsAppRealConnectionPanel: React.FC = () => {
           A sessão fica salva no servidor da clínica — desconectar aqui revoga o acesso de verdade, como remover um
           aparelho conectado no WhatsApp do celular.
         </p>
+      </div>
+
+      {showImportPrompt && (
+        <WhatsAppImportPrompt onClose={() => setShowImportPrompt(false)} />
+      )}
+    </div>
+  );
+};
+
+/**
+ * Pop-up exibido uma vez, na transição para 'connected' — pergunta
+ * se a clínica quer importar os contatos que já existiam nessa
+ * instância do WhatsApp antes de conectar ao MediFlux, e, se sim, se
+ * eles já devem nascer como paciente confirmado ou como lead (a
+ * mesma escolha vale para todos; ajustes individuais depois ficam em
+ * Contatos → aba WhatsApp). Nunca importa nada sozinho sem essa
+ * confirmação explícita.
+ */
+const WhatsAppImportPrompt: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { success, error: showErrorToast } = useToast();
+  const [step, setStep] = useState<'ask_import' | 'ask_as_patient' | 'importing'>('ask_import');
+
+  const handleDecline = () => {
+    onClose();
+  };
+
+  const handleAccept = () => {
+    setStep('ask_as_patient');
+  };
+
+  const handleChooseAndImport = async (asPatient: boolean) => {
+    setStep('importing');
+    try {
+      const { contacts } = await apiService.getWhatsAppContacts();
+      const pending = contacts.filter((c) => !c.alreadyImported);
+      if (pending.length === 0) {
+        success('Nada para importar', 'Todos os contatos do WhatsApp já estão no MediFlux.');
+        onClose();
+        return;
+      }
+      const res = await apiService.bulkImportWhatsAppContacts({
+        asPatient,
+        contacts: pending.map((c) => ({ remoteJid: c.remoteJid, phone: c.phone, name: c.name })),
+      });
+      success(
+        'Contatos Importados',
+        `${res.importedCount} contato(s) importado(s)${res.skippedCount ? `, ${res.skippedCount} já existiam e foram ignorados` : ''}. Veja em Contatos → aba WhatsApp.`
+      );
+    } catch (err: any) {
+      showErrorToast('Falha ao importar contatos', err?.message || 'Tente novamente pela aba WhatsApp em Contatos.');
+    } finally {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+        {step === 'ask_import' && (
+          <>
+            <h4 className="font-bold text-slate-900 text-sm">WhatsApp conectado!</h4>
+            <p className="text-xs text-slate-600">
+              Encontramos contatos que já existiam nesta conversa do WhatsApp, antes de conectar ao MediFlux. Deseja importá-los agora?
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={handleDecline} className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold text-xs">
+                Agora não
+              </button>
+              <button onClick={handleAccept} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors">
+                Importar contatos
+              </button>
+            </div>
+          </>
+        )}
+        {step === 'ask_as_patient' && (
+          <>
+            <h4 className="font-bold text-slate-900 text-sm">Como importar?</h4>
+            <p className="text-xs text-slate-600">
+              Os contatos importados já devem ser tratados como pacientes confirmados, ou como leads (interessados, ainda não atendidos)?
+              Você pode ajustar cada um individualmente depois, em Contatos → aba WhatsApp.
+            </p>
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={() => handleChooseAndImport(false)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition-colors"
+              >
+                <div className="font-bold text-xs">Como Leads</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Recomendado — ainda não são pacientes confirmados.</div>
+              </button>
+              <button
+                onClick={() => handleChooseAndImport(true)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition-colors"
+              >
+                <div className="font-bold text-xs">Como Pacientes Confirmados</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Use só se tiver certeza de que já são pacientes de verdade.</div>
+              </button>
+            </div>
+          </>
+        )}
+        {step === 'importing' && (
+          <div className="flex items-center gap-2 text-slate-600 text-xs py-4 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Importando contatos e histórico...
+          </div>
+        )}
       </div>
     </div>
   );
